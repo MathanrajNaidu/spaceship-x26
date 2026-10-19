@@ -8,8 +8,9 @@ import type { ResourceRepository, ResourceSearch } from '../ports/ResourceReposi
 import { AuthenticationError } from '../../domain/errors/AuthenticationError.js';
 import { ResourceNotFoundError } from '../../domain/errors/NotFoundError.js';
 import type { Passenger } from '../../domain/passenger/Passenger.js';
-import { Resource, type ResourceStatus } from '../../domain/resource/Resource.js';
+import { assertCapacity, Resource, type ResourceStatus } from '../../domain/resource/Resource.js';
 import { parseResourceType, type ResourceType } from '../../domain/resource/ResourceType.js';
+import { assertName } from '../../domain/shared/assertName.js';
 import { MembershipTier, type TierName } from '../../domain/tier/MembershipTier.js';
 
 export interface ResourceOccupancy {
@@ -55,14 +56,17 @@ export class ResourceService {
 
   async provision(actor: Actor, input: ProvisionResourceInput): Promise<Resource> {
     this.authorizer.requireCrewLead(actor);
+    const type = parseResourceType(input.type);
+    const name = assertName(input.name, 'Resource name');
+    const capacity = assertCapacity(input.capacity);
+    const minimumTier =
+      input.minimumTier === undefined ? undefined : MembershipTier.from(input.minimumTier);
     const resource = Resource.provision({
       id: input.id ?? this.ids.next('res'),
-      name: input.name,
-      type: parseResourceType(input.type),
-      capacity: input.capacity,
-      ...(input.minimumTier === undefined
-        ? {}
-        : { minimumTier: MembershipTier.from(input.minimumTier) }),
+      name,
+      type,
+      capacity,
+      ...(minimumTier === undefined ? {} : { minimumTier }),
       now: this.clock.now(),
     });
     await this.resources.save(resource);

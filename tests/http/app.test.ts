@@ -2,7 +2,7 @@ import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 
-import { createApp } from '../../src/http/app.js';
+import { buildTestApp } from '../support/buildTestApp.js';
 import { toErrorBody, errorHandler } from '../../src/http/errors/errorHandler.js';
 
 interface ErrorResponse {
@@ -28,32 +28,32 @@ import { InvalidTierError } from '../../src/domain/errors/ValidationError.js';
 
 describe('createApp', () => {
   it('reports liveness without an actor header', async () => {
-    const response = await request(createApp()).get('/api/v1/health');
+    const response = await request(buildTestApp().app).get('/api/v1/health');
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ status: 'ok' });
     expect(response.headers['x-request-id']).toEqual(expect.any(String));
   });
 
   it('keeps a caller-supplied request id', async () => {
-    const response = await request(createApp())
+    const response = await request(buildTestApp().app)
       .get('/api/v1/health')
       .set('X-Request-Id', 'trace-42');
     expect(response.headers['x-request-id']).toBe('trace-42');
   });
 
   it('replaces a request id that is empty or too long', async () => {
-    const blank = await request(createApp()).get('/api/v1/health').set('X-Request-Id', '');
+    const blank = await request(buildTestApp().app).get('/api/v1/health').set('X-Request-Id', '');
     expect(blank.headers['x-request-id']).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
     );
-    const huge = await request(createApp())
+    const huge = await request(buildTestApp().app)
       .get('/api/v1/health')
       .set('X-Request-Id', 'a'.repeat(101));
     expect(huge.headers['x-request-id']).not.toBe('a'.repeat(101));
   });
 
   it('returns the standard 404 body for an unknown route', async () => {
-    const response = await request(createApp()).get('/api/v1/does-not-exist');
+    const response = await request(buildTestApp().app).get('/api/v1/does-not-exist');
     expect(response.status).toBe(404);
     const error = errorOf(response);
     expect(error.code).toBe('NOT_FOUND');
@@ -63,7 +63,7 @@ describe('createApp', () => {
   });
 
   it('rejects malformed JSON', async () => {
-    const response = await request(createApp())
+    const response = await request(buildTestApp().app)
       .post('/api/v1/health')
       .set('Content-Type', 'application/json')
       .send('{"name":');
@@ -72,7 +72,7 @@ describe('createApp', () => {
   });
 
   it('rejects a body over 100kb', async () => {
-    const response = await request(createApp())
+    const response = await request(buildTestApp().app)
       .post('/api/v1/health')
       .set('Content-Type', 'application/json')
       .send({ name: 'a'.repeat(120_000) });

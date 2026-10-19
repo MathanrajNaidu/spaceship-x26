@@ -6,6 +6,7 @@ import type { IdGenerator } from '../ports/IdGenerator.js';
 import type { PassengerRepository, PassengerSearch } from '../ports/PassengerRepository.js';
 import { PassengerNotFoundError } from '../../domain/errors/NotFoundError.js';
 import { Passenger, type PassengerStatus } from '../../domain/passenger/Passenger.js';
+import { assertName } from '../../domain/shared/assertName.js';
 import { MembershipTier } from '../../domain/tier/MembershipTier.js';
 
 export interface PassengerListQuery {
@@ -25,10 +26,12 @@ export class PassengerService {
 
   async create(actor: Actor, input: { name: string; tier: string }): Promise<Passenger> {
     this.authorizer.requireCrewLead(actor);
+    const tier = MembershipTier.from(input.tier);
+    const name = assertName(input.name, 'Passenger name');
     const passenger = Passenger.create({
       id: this.ids.next('pas'),
-      name: input.name,
-      tier: MembershipTier.from(input.tier),
+      name,
+      tier,
       now: this.clock.now(),
     });
     await this.passengers.save(passenger);
