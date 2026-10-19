@@ -1,4 +1,4 @@
-import { CrewRosterInvariantError } from '../errors/CrewRosterInvariantError.js';
+import { CrewRosterInvariantError } from '../errors/InvariantViolationError.js';
 import type { CrewLead } from './CrewLead.js';
 
 export class CrewRoster {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { CrewLead } from '../../../src/domain/crew/CrewLead.js';
 import { CrewRoster } from '../../../src/domain/crew/CrewRoster.js';
-import { CrewRosterInvariantError } from '../../../src/domain/errors/CrewRosterInvariantError.js';
+import { CrewRosterInvariantError } from '../../../src/domain/errors/InvariantViolationError.js';
 
 function sampleLeads(): [CrewLead, CrewLead, CrewLead, CrewLead] {
   return [

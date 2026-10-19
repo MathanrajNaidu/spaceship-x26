@@ -1,4 +1,4 @@
-import { InvalidTierError } from '../errors/InvalidTierError.js';
+import { InvalidTierError } from '../errors/ValidationError.js';
 
 export const TIERS = ['SILVER', 'GOLD', 'PLATINUM'] as const;
 export type TierName = (typeof TIERS)[number];

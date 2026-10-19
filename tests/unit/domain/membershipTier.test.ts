@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidTierError } from '../../../src/domain/errors/InvalidTierError.js';
+import { InvalidTierError } from '../../../src/domain/errors/ValidationError.js';
 import { MembershipTier } from '../../../src/domain/tier/MembershipTier.js';
 
 describe('MembershipTier', () => {
