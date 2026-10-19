@@ -24,12 +24,15 @@ export class PassengerService {
     private readonly clock: Clock,
   ) {}
 
-  async create(actor: Actor, input: { name: string; tier: string }): Promise<Passenger> {
+  async create(
+    actor: Actor,
+    input: { id?: string; name: string; tier: string },
+  ): Promise<Passenger> {
     this.authorizer.requireCrewLead(actor);
     const tier = MembershipTier.from(input.tier);
     const name = assertName(input.name, 'Passenger name');
     const passenger = Passenger.create({
-      id: this.ids.next('pas'),
+      id: input.id ?? this.ids.next('pas'),
       name,
       tier,
       now: this.clock.now(),
