@@ -26,9 +26,10 @@ describe('boot', () => {
     expect((resources.body as { page: { total: number } }).page.total).toBe(11);
 
     const passengers = await request(app).get('/api/v1/passengers').set('X-Actor-Id', 'crew-mira');
-    const rows = (passengers.body as { data: { id: string; tier: string }[] }).data.map(
-      (item) => [item.id, item.tier],
-    );
+    const rows = (passengers.body as { data: { id: string; tier: string }[] }).data.map((item) => [
+      item.id,
+      item.tier,
+    ]);
     expect(rows).toHaveLength(3);
     expect(rows).toEqual(
       expect.arrayContaining([
