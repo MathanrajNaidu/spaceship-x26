@@ -1,4 +1,5 @@
-import { InvalidNameError, ValidationError } from '../errors/ValidationError.js';
+import { ValidationError } from '../errors/ValidationError.js';
+import { assertName } from '../shared/assertName.js';
 
 export class CrewLead {
   private constructor(
@@ -8,13 +9,9 @@ export class CrewLead {
 
   static create(id: string, name: string): CrewLead {
     const trimmedId = id.trim();
-    const trimmedName = name.trim();
     if (trimmedId.length === 0) {
       throw new ValidationError('Crew lead id must not be blank.');
     }
-    if (trimmedName.length < 1 || trimmedName.length > 100) {
-      throw new InvalidNameError('Crew lead name');
-    }
-    return new CrewLead(trimmedId, trimmedName);
+    return new CrewLead(trimmedId, assertName(name, 'Crew lead name'));
   }
 }
