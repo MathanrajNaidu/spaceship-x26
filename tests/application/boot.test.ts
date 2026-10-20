@@ -50,7 +50,7 @@ describe('boot', () => {
   });
 
   it('skips demo passengers when the flag is false and still loads inventory', async () => {
-    const { app } = await buildApplication({ SEED_DEMO_PASSENGERS: 'false' });
+    const { app } = await buildApplication({ SEED_DEMO_PASSENGERS: 'false', LOG_LEVEL: 'silent' });
     const passengers = await request(app).get('/api/v1/passengers').set('X-Actor-Id', 'crew-ada');
     expect((passengers.body as { page: { total: number } }).page.total).toBe(0);
     const resources = await request(app).get('/api/v1/resources').set('X-Actor-Id', 'crew-ada');
@@ -96,7 +96,7 @@ describe('boot', () => {
   });
 
   it('listens and answers a health check', async () => {
-    const { app } = await buildApplication({ SEED_DEMO_PASSENGERS: 'false' });
+    const { app } = await buildApplication({ SEED_DEMO_PASSENGERS: 'false', LOG_LEVEL: 'silent' });
     const server = await startServer(app, 0, '127.0.0.1');
     const address = server.address();
     if (address === null || typeof address === 'string') {
