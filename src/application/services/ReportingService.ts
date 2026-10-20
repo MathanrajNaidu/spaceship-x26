@@ -8,6 +8,7 @@ import type { UsageSessionReader } from '../ports/UsageSessionRepository.js';
 import { AuthenticationError } from '../../domain/errors/AuthenticationError.js';
 import { PassengerNotFoundError } from '../../domain/errors/NotFoundError.js';
 import { RESOURCE_TYPES, type ResourceType } from '../../domain/resource/ResourceType.js';
+import { TIERS, type TierName } from '../../domain/tier/MembershipTier.js';
 import type { UsageSession } from '../../domain/usage/UsageSession.js';
 
 export interface HistoryQuery {
@@ -32,6 +33,28 @@ export interface UsageHistory {
   readonly sessions: readonly UsageSession[];
   readonly totalsByResourceType: readonly TypeTotal[];
   readonly daily: readonly DailyTotal[];
+}
+
+export interface TopResource {
+  readonly resourceId: string;
+  readonly name: string;
+  readonly sessions: number;
+  readonly totalDurationMs: number;
+}
+
+export interface TierUsageGroup {
+  readonly tier: TierName;
+  readonly passengerCount: number;
+  readonly sessions: number;
+  readonly totalDurationMs: number;
+  readonly topResources: readonly TopResource[];
+}
+
+interface TierBucket {
+  passengers: Set<string>;
+  sessions: number;
+  totalDurationMs: number;
+  resources: Map<string, TopResource>;
 }
 
 export class ReportingService {
@@ -65,6 +88,58 @@ export class ReportingService {
       throw new PassengerNotFoundError(passengerId);
     }
     return this.assemble(passengerId, query);
+  }
+
+  async usageByTier(actor: Actor, query: HistoryQuery): Promise<readonly TierUsageGroup[]> {
+    this.authorizer.requireCrewLead(actor);
+    assertTimeRange(query.from, query.to);
+    const sessions = await this.sessions.search({
+      ...(query.from === undefined ? {} : { from: query.from }),
+      ...(query.to === undefined ? {} : { to: query.to }),
+    });
+    const resources = new Map(
+      (await this.resources.search({})).map((resource) => [resource.id, resource]),
+    );
+    const buckets = new Map<TierName, TierBucket>(
+      TIERS.map((tier) => [
+        tier,
+        { passengers: new Set(), sessions: 0, totalDurationMs: 0, resources: new Map() },
+      ]),
+    );
+    const now = this.clock.now();
+    for (const session of sessions) {
+      const bucket = buckets.get(session.tierAtStart.name);
+      if (!bucket) {
+        continue;
+      }
+      const duration = session.durationMs(now);
+      bucket.passengers.add(session.passengerId);
+      bucket.sessions += 1;
+      bucket.totalDurationMs += duration;
+      const resource = resources.get(session.resourceId);
+      const current = bucket.resources.get(session.resourceId) ?? {
+        resourceId: session.resourceId,
+        name: resource?.name ?? session.resourceId,
+        sessions: 0,
+        totalDurationMs: 0,
+      };
+      bucket.resources.set(session.resourceId, {
+        ...current,
+        sessions: current.sessions + 1,
+        totalDurationMs: current.totalDurationMs + duration,
+      });
+    }
+    return TIERS.map((tier) => {
+      const bucket = buckets.get(tier);
+      const topResources = [...(bucket?.resources.values() ?? [])].sort(byDemand).slice(0, 3);
+      return {
+        tier,
+        passengerCount: bucket?.passengers.size ?? 0,
+        sessions: bucket?.sessions ?? 0,
+        totalDurationMs: bucket?.totalDurationMs ?? 0,
+        topResources,
+      };
+    });
   }
 
   private async assemble(passengerId: string, query: HistoryQuery): Promise<UsageHistory> {
@@ -111,4 +186,12 @@ export class ReportingService {
       daily: [...days.values()].sort((left, right) => left.date.localeCompare(right.date)),
     };
   }
+}
+
+function byDemand(left: TopResource, right: TopResource): number {
+  return (
+    right.totalDurationMs - left.totalDurationMs ||
+    right.sessions - left.sessions ||
+    left.name.localeCompare(right.name)
+  );
 }
