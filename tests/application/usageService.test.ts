@@ -37,7 +37,17 @@ function harness() {
   const sessions = new InMemoryUsageSessionRepository();
   const authorizer = new Authorizer();
   const events = new InProcessEventBus();
-  const passengerService = new PassengerService(authorizer, passengers, ids, clock, events);
+  const mutex = new KeyedMutex();
+  const passengerService = new PassengerService(
+    authorizer,
+    passengers,
+    ids,
+    clock,
+    events,
+    sessions,
+    resources,
+    mutex,
+  );
   const resourceService = new ResourceService(
     authorizer,
     resources,
@@ -54,7 +64,7 @@ function harness() {
     new TierAccessPolicy(),
     ids,
     clock,
-    new KeyedMutex(),
+    mutex,
     events,
   );
   return {

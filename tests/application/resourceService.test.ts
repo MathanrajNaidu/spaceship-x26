@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Actor } from '../../src/application/auth/Actor.js';
 import { Authorizer } from '../../src/application/auth/Authorizer.js';
+import { KeyedMutex } from '../../src/application/concurrency/KeyedMutex.js';
 import { PassengerService } from '../../src/application/services/PassengerService.js';
 import { ResourceService } from '../../src/application/services/ResourceService.js';
 import { AuthenticationError } from '../../src/domain/errors/AuthenticationError.js';
@@ -15,6 +16,7 @@ import {
 import { InProcessEventBus } from '../../src/infrastructure/events/InProcessEventBus.js';
 import { InMemoryPassengerRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryPassengerRepository.js';
 import { InMemoryResourceRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryResourceRepository.js';
+import { InMemoryUsageSessionRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryUsageSessionRepository.js';
 import { FakeClock } from '../support/FakeClock.js';
 import { SequentialIdGenerator } from '../support/SequentialIdGenerator.js';
 
@@ -27,7 +29,18 @@ function harness() {
   const resources = new InMemoryResourceRepository();
   const authorizer = new Authorizer();
   const events = new InProcessEventBus();
-  const passengerService = new PassengerService(authorizer, passengers, ids, clock, events);
+  const sessions = new InMemoryUsageSessionRepository();
+  const mutex = new KeyedMutex();
+  const passengerService = new PassengerService(
+    authorizer,
+    passengers,
+    ids,
+    clock,
+    events,
+    sessions,
+    resources,
+    mutex,
+  );
   const resourceService = new ResourceService(
     authorizer,
     resources,

@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 
 import { Authorizer } from './application/auth/Authorizer.js';
+import { KeyedMutex } from './application/concurrency/KeyedMutex.js';
 import { CrewLeadQuery } from './application/services/CrewLeadQuery.js';
 import { PassengerService } from './application/services/PassengerService.js';
 import { ResourceService } from './application/services/ResourceService.js';
@@ -15,6 +16,7 @@ import { UuidGenerator } from './infrastructure/ids/UuidGenerator.js';
 import { InMemoryAuditLogRepository } from './infrastructure/persistence/in-memory/InMemoryAuditLogRepository.js';
 import { InMemoryPassengerRepository } from './infrastructure/persistence/in-memory/InMemoryPassengerRepository.js';
 import { InMemoryResourceRepository } from './infrastructure/persistence/in-memory/InMemoryResourceRepository.js';
+import { InMemoryUsageSessionRepository } from './infrastructure/persistence/in-memory/InMemoryUsageSessionRepository.js';
 import { DEFAULT_CREW_LEADS } from './infrastructure/seed/missionSeed.js';
 import { seedMission } from './infrastructure/seed/seedMission.js';
 import { SystemClock } from './infrastructure/time/SystemClock.js';
@@ -35,7 +37,18 @@ export async function buildApplication(env: NodeJS.ProcessEnv): Promise<Applicat
   const ids = new UuidGenerator();
   const events = new InProcessEventBus();
   events.subscribe(new AuditLogSubscriber(new InMemoryAuditLogRepository(), ids));
-  const passengerService = new PassengerService(authorizer, passengers, ids, clock, events);
+  const sessions = new InMemoryUsageSessionRepository();
+  const mutex = new KeyedMutex();
+  const passengerService = new PassengerService(
+    authorizer,
+    passengers,
+    ids,
+    clock,
+    events,
+    sessions,
+    resources,
+    mutex,
+  );
   const resourceService = new ResourceService(
     authorizer,
     resources,

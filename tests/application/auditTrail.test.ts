@@ -38,7 +38,16 @@ function harness() {
     clock,
     audit: new AuditService(authorizer, auditLog),
     events,
-    passengerService: new PassengerService(authorizer, passengers, ids, clock, events),
+    passengerService: new PassengerService(
+      authorizer,
+      passengers,
+      ids,
+      clock,
+      events,
+      sessions,
+      resources,
+      new KeyedMutex(),
+    ),
     resourceService: new ResourceService(authorizer, resources, passengers, ids, clock, events),
     usageService: new UsageService(
       authorizer,

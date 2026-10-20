@@ -1,4 +1,5 @@
 import { Authorizer } from '../../src/application/auth/Authorizer.js';
+import { KeyedMutex } from '../../src/application/concurrency/KeyedMutex.js';
 import { CrewLeadQuery } from '../../src/application/services/CrewLeadQuery.js';
 import { PassengerService } from '../../src/application/services/PassengerService.js';
 import { ResourceService } from '../../src/application/services/ResourceService.js';
@@ -9,6 +10,7 @@ import { InProcessEventBus } from '../../src/infrastructure/events/InProcessEven
 import { RosterActorResolver } from '../../src/infrastructure/auth/RosterActorResolver.js';
 import { InMemoryPassengerRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryPassengerRepository.js';
 import { InMemoryResourceRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryResourceRepository.js';
+import { InMemoryUsageSessionRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryUsageSessionRepository.js';
 import { FakeClock } from './FakeClock.js';
 import { SequentialIdGenerator } from './SequentialIdGenerator.js';
 
@@ -30,7 +32,18 @@ export function buildTestApp(now = new Date('2026-06-01T00:00:00.000Z')) {
     CrewLead.create(CREW.mira, 'Mira Santos'),
   ]);
   const events = new InProcessEventBus();
-  const passengerService = new PassengerService(authorizer, passengers, ids, clock, events);
+  const sessions = new InMemoryUsageSessionRepository();
+  const mutex = new KeyedMutex();
+  const passengerService = new PassengerService(
+    authorizer,
+    passengers,
+    ids,
+    clock,
+    events,
+    sessions,
+    resources,
+    mutex,
+  );
   const resourceService = new ResourceService(
     authorizer,
     resources,
