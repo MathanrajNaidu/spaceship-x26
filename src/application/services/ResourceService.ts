@@ -2,12 +2,15 @@ import type { Actor } from '../auth/Actor.js';
 import type { Authorizer } from '../auth/Authorizer.js';
 import { toEventActor } from '../auth/eventActor.js';
 import { slicePage, type Page } from '../pagination.js';
+import type { KeyedMutex } from '../concurrency/KeyedMutex.js';
 import type { Clock } from '../ports/Clock.js';
 import type { EventPublisher } from '../ports/EventPublisher.js';
 import type { IdGenerator } from '../ports/IdGenerator.js';
 import type { PassengerRepository } from '../ports/PassengerRepository.js';
 import type { ResourceRepository, ResourceSearch } from '../ports/ResourceRepository.js';
+import type { UsageSessionRepository } from '../ports/UsageSessionRepository.js';
 import { AuthenticationError } from '../../domain/errors/AuthenticationError.js';
+import { ResourceInUseError } from '../../domain/errors/ConflictError.js';
 import { ResourceNotFoundError } from '../../domain/errors/NotFoundError.js';
 import type { Passenger } from '../../domain/passenger/Passenger.js';
 import { assertCapacity, Resource, type ResourceStatus } from '../../domain/resource/Resource.js';
@@ -55,6 +58,8 @@ export class ResourceService {
     private readonly ids: IdGenerator,
     private readonly clock: Clock,
     private readonly events: EventPublisher,
+    private readonly sessions: UsageSessionRepository,
+    private readonly mutex: KeyedMutex,
   ) {}
 
   async provision(actor: Actor, input: ProvisionResourceInput): Promise<Resource> {
@@ -85,6 +90,27 @@ export class ResourceService {
     return resource;
   }
 
+  async decommission(actor: Actor, id: string): Promise<Resource> {
+    this.authorizer.requireCrewLead(actor);
+    return this.mutex.runExclusive(id, async () => {
+      const resource = await this.requireResource(id);
+      const active = await this.sessions.countActive(resource.id);
+      if (active > 0) {
+        throw new ResourceInUseError(resource.name, active);
+      }
+      const now = this.clock.now();
+      resource.decommission(now);
+      await this.resources.save(resource);
+      await this.events.publish({
+        type: 'ResourceDecommissioned',
+        occurredAt: now,
+        actor: toEventActor(actor),
+        resourceId: resource.id,
+      });
+      return resource;
+    });
+  }
+
   async list(actor: Actor, query: ResourceListQuery): Promise<Page<Resource>> {
     this.authorizer.requireCrewLead(actor);
     const filter: ResourceSearch = {};
@@ -103,7 +129,7 @@ export class ResourceService {
   async get(actor: Actor, id: string): Promise<ResourceDetails> {
     this.authorizer.requireCrewLead(actor);
     const resource = await this.requireResource(id);
-    return { resource, occupancy: this.occupancy(resource, 0) };
+    return { resource, occupancy: await this.occupancy(resource) };
   }
 
   async discover(
@@ -116,16 +142,17 @@ export class ResourceService {
       resource.isAccessibleTo(passenger.tier),
     );
     const page = slicePage(accessible, query.limit, query.offset);
-    return {
-      ...page,
-      items: page.items.map((resource) => ({
-        resource,
-        availableSlots: this.occupancy(resource, 0).availableSlots,
-      })),
-    };
+    const items = await Promise.all(
+      page.items.map(async (resource) => {
+        const occupancy = await this.occupancy(resource);
+        return { resource, availableSlots: occupancy.availableSlots };
+      }),
+    );
+    return { ...page, items };
   }
 
-  private occupancy(resource: Resource, active: number): ResourceOccupancy {
+  private async occupancy(resource: Resource): Promise<ResourceOccupancy> {
+    const active = await this.sessions.countActive(resource.id);
     return {
       active,
       capacity: resource.capacity,

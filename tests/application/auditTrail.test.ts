@@ -34,6 +34,7 @@ function harness() {
   const events = new InProcessEventBus();
   events.subscribe(new AuditLogSubscriber(auditLog, ids));
   const authorizer = new Authorizer();
+  const mutex = new KeyedMutex();
   return {
     clock,
     audit: new AuditService(authorizer, auditLog),
@@ -46,9 +47,18 @@ function harness() {
       events,
       sessions,
       resources,
-      new KeyedMutex(),
+      mutex,
     ),
-    resourceService: new ResourceService(authorizer, resources, passengers, ids, clock, events),
+    resourceService: new ResourceService(
+      authorizer,
+      resources,
+      passengers,
+      ids,
+      clock,
+      events,
+      sessions,
+      mutex,
+    ),
     usageService: new UsageService(
       authorizer,
       passengers,
@@ -57,7 +67,7 @@ function harness() {
       new TierAccessPolicy(),
       ids,
       clock,
-      new KeyedMutex(),
+      mutex,
       events,
     ),
   };

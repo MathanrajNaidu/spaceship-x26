@@ -51,6 +51,8 @@ export function buildTestApp(now = new Date('2026-06-01T00:00:00.000Z')) {
     ids,
     clock,
     events,
+    sessions,
+    mutex,
   );
   const app = createApp({
     actorResolver: new RosterActorResolver(roster, passengers),

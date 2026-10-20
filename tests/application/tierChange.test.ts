@@ -56,6 +56,8 @@ function harness() {
     ids,
     clock,
     events,
+    sessions,
+    mutex,
   );
   const usageService = new UsageService(
     authorizer,

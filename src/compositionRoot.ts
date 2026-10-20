@@ -56,6 +56,8 @@ export async function buildApplication(env: NodeJS.ProcessEnv): Promise<Applicat
     ids,
     clock,
     events,
+    sessions,
+    mutex,
   );
   const lead = roster.leads[0];
   await seedMission({

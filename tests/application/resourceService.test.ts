@@ -48,8 +48,10 @@ function harness() {
     ids,
     clock,
     events,
+    sessions,
+    mutex,
   );
-  return { clock, passengers, resources, passengerService, resourceService };
+  return { clock, passengers, resources, sessions, passengerService, resourceService };
 }
 
 describe('ResourceService', () => {

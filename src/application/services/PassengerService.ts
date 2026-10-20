@@ -104,6 +104,48 @@ export class PassengerService {
     return { passenger, change, endedSessions };
   }
 
+  async deactivate(
+    actor: Actor,
+    id: string,
+  ): Promise<{ passenger: Passenger; endedSessions: readonly UsageSession[] }> {
+    this.authorizer.requireCrewLead(actor);
+    const passenger = await this.requirePassenger(id);
+    passenger.deactivate(this.clock.now());
+    await this.passengers.save(passenger);
+    const endedSessions: UsageSession[] = [];
+    for (const candidate of await this.sessions.listActiveByPassenger(passenger.id)) {
+      const closed = await this.mutex.runExclusive(candidate.resourceId, async () => {
+        const session = await this.sessions.findById(candidate.id);
+        if (!session?.isActive) {
+          return null;
+        }
+        const endedAt = this.clock.now();
+        session.end(endedAt, 'PASSENGER_DEACTIVATED');
+        await this.sessions.save(session);
+        await this.events.publish({
+          type: 'UsageEnded',
+          occurredAt: endedAt,
+          actor: toEventActor(actor),
+          passengerId: session.passengerId,
+          resourceId: session.resourceId,
+          sessionId: session.id,
+          endReason: 'PASSENGER_DEACTIVATED',
+        });
+        return session;
+      });
+      if (closed) {
+        endedSessions.push(closed);
+      }
+    }
+    await this.events.publish({
+      type: 'PassengerDeactivated',
+      occurredAt: passenger.updatedAt,
+      actor: toEventActor(actor),
+      passengerId: passenger.id,
+    });
+    return { passenger, endedSessions };
+  }
+
   async get(actor: Actor, id: string): Promise<Passenger> {
     this.authorizer.requireCrewLead(actor);
     return this.requirePassenger(id);
