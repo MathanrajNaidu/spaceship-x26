@@ -1,7 +1,9 @@
 import type { Actor } from '../auth/Actor.js';
 import type { Authorizer } from '../auth/Authorizer.js';
+import { toEventActor } from '../auth/eventActor.js';
 import { slicePage, type Page } from '../pagination.js';
 import type { Clock } from '../ports/Clock.js';
+import type { EventPublisher } from '../ports/EventPublisher.js';
 import type { IdGenerator } from '../ports/IdGenerator.js';
 import type { PassengerRepository, PassengerSearch } from '../ports/PassengerRepository.js';
 import { PassengerNotFoundError } from '../../domain/errors/NotFoundError.js';
@@ -22,6 +24,7 @@ export class PassengerService {
     private readonly passengers: PassengerRepository,
     private readonly ids: IdGenerator,
     private readonly clock: Clock,
+    private readonly events: EventPublisher,
   ) {}
 
   async create(
@@ -38,6 +41,14 @@ export class PassengerService {
       now: this.clock.now(),
     });
     await this.passengers.save(passenger);
+    await this.events.publish({
+      type: 'PassengerCreated',
+      occurredAt: passenger.createdAt,
+      actor: toEventActor(actor),
+      passengerId: passenger.id,
+      name: passenger.name,
+      tier: passenger.tier.name,
+    });
     return passenger;
   }
 
@@ -46,6 +57,13 @@ export class PassengerService {
     const passenger = await this.requirePassenger(id);
     passenger.rename(name, this.clock.now());
     await this.passengers.save(passenger);
+    await this.events.publish({
+      type: 'PassengerUpdated',
+      occurredAt: passenger.updatedAt,
+      actor: toEventActor(actor),
+      passengerId: passenger.id,
+      name: passenger.name,
+    });
     return passenger;
   }
 

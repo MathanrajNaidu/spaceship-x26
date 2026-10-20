@@ -7,6 +7,7 @@ import { AuthorizationError } from '../../src/domain/errors/AuthorizationError.j
 import { PassengerNotFoundError } from '../../src/domain/errors/NotFoundError.js';
 import { InvalidTierError } from '../../src/domain/errors/ValidationError.js';
 import { PassengerInactiveError } from '../../src/domain/errors/ConflictError.js';
+import { InProcessEventBus } from '../../src/infrastructure/events/InProcessEventBus.js';
 import { InMemoryPassengerRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryPassengerRepository.js';
 import { FakeClock } from '../support/FakeClock.js';
 import { SequentialIdGenerator } from '../support/SequentialIdGenerator.js';
@@ -18,7 +19,13 @@ function service() {
   const clock = new FakeClock(new Date('2026-04-01T00:00:00.000Z'));
   const passengers = new InMemoryPassengerRepository();
   const ids = new SequentialIdGenerator();
-  const passengerService = new PassengerService(new Authorizer(), passengers, ids, clock);
+  const passengerService = new PassengerService(
+    new Authorizer(),
+    passengers,
+    ids,
+    clock,
+    new InProcessEventBus(),
+  );
   return { clock, passengers, passengerService };
 }
 

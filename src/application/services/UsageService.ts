@@ -1,7 +1,9 @@
 import type { Actor } from '../auth/Actor.js';
 import type { Authorizer } from '../auth/Authorizer.js';
+import { toEventActor } from '../auth/eventActor.js';
 import type { KeyedMutex } from '../concurrency/KeyedMutex.js';
 import type { Clock } from '../ports/Clock.js';
+import type { EventPublisher } from '../ports/EventPublisher.js';
 import type { IdGenerator } from '../ports/IdGenerator.js';
 import type { PassengerRepository } from '../ports/PassengerRepository.js';
 import type { ResourceRepository } from '../ports/ResourceRepository.js';
@@ -9,13 +11,13 @@ import type { UsageSessionRepository } from '../ports/UsageSessionRepository.js'
 import type { AccessPolicy } from '../../domain/access/AccessPolicy.js';
 import { AccessDeniedError } from '../../domain/errors/AccessDeniedError.js';
 import { AuthenticationError } from '../../domain/errors/AuthenticationError.js';
+import type { DomainError } from '../../domain/errors/DomainError.js';
 import {
   CapacityExceededError,
   ResourceDecommissionedError,
   SessionAlreadyActiveError,
 } from '../../domain/errors/ConflictError.js';
 import { ResourceNotFoundError, SessionNotFoundError } from '../../domain/errors/NotFoundError.js';
-import type { Passenger } from '../../domain/passenger/Passenger.js';
 import type { Resource } from '../../domain/resource/Resource.js';
 import { UsageSession, type EndReason } from '../../domain/usage/UsageSession.js';
 
@@ -29,6 +31,7 @@ export class UsageService {
     private readonly ids: IdGenerator,
     private readonly clock: Clock,
     private readonly mutex: KeyedMutex,
+    private readonly events: EventPublisher,
   ) {}
 
   async startUsage(actor: Actor, resourceId: string): Promise<UsageSession> {
@@ -38,24 +41,52 @@ export class UsageService {
 
   private async startUsageUnlocked(actor: Actor, resourceId: string): Promise<UsageSession> {
     const resource = await this.requireResource(resourceId);
-    const passenger = await this.requireActivePassenger(actor.id);
+    const passenger = await this.passengers.findById(actor.id);
+    if (!passenger || passenger.status !== 'ACTIVE') {
+      return this.deny(
+        actor,
+        actor.id,
+        resource.id,
+        new AuthenticationError('Unknown or inactive actor.'),
+      );
+    }
     if (resource.status === 'DECOMMISSIONED') {
-      throw new ResourceDecommissionedError(resource.name);
+      return this.deny(
+        actor,
+        passenger.id,
+        resource.id,
+        new ResourceDecommissionedError(resource.name),
+      );
     }
     const decision = this.policy.evaluate(passenger, resource);
     if (!decision.allowed) {
-      throw new AccessDeniedError(decision.message, decision.details);
+      return this.deny(
+        actor,
+        passenger.id,
+        resource.id,
+        new AccessDeniedError(decision.message, decision.details),
+      );
     }
     const existing = await this.sessions.findActiveByPassengerAndResource(
       passenger.id,
       resource.id,
     );
     if (existing) {
-      throw new SessionAlreadyActiveError(resource.name, existing.id);
+      return this.deny(
+        actor,
+        passenger.id,
+        resource.id,
+        new SessionAlreadyActiveError(resource.name, existing.id),
+      );
     }
     const active = await this.sessions.countActive(resource.id);
     if (active >= resource.capacity) {
-      throw new CapacityExceededError(resource.name, resource.capacity, active);
+      return this.deny(
+        actor,
+        passenger.id,
+        resource.id,
+        new CapacityExceededError(resource.name, resource.capacity, active),
+      );
     }
     const session = UsageSession.start({
       id: this.ids.next('ses'),
@@ -65,7 +96,33 @@ export class UsageService {
       now: this.clock.now(),
     });
     await this.sessions.save(session);
+    await this.events.publish({
+      type: 'UsageStarted',
+      occurredAt: session.startedAt,
+      actor: toEventActor(actor),
+      passengerId: passenger.id,
+      resourceId: resource.id,
+      sessionId: session.id,
+      tierAtStart: passenger.tier.name,
+    });
     return session;
+  }
+
+  private async deny(
+    actor: Actor,
+    passengerId: string,
+    resourceId: string,
+    error: DomainError,
+  ): Promise<never> {
+    await this.events.publish({
+      type: 'UsageDenied',
+      occurredAt: this.clock.now(),
+      actor: toEventActor(actor),
+      passengerId,
+      resourceId,
+      reason: error.code,
+    });
+    throw error;
   }
 
   async listOwn(actor: Actor, status?: 'active' | 'ended'): Promise<UsageSession[]> {
@@ -78,15 +135,16 @@ export class UsageService {
 
   async endOwn(actor: Actor, sessionId: string): Promise<UsageSession> {
     const passenger = this.authorizer.requirePassenger(actor);
-    return this.endSession(sessionId, 'PASSENGER_ENDED', passenger.id);
+    return this.endSession(actor, sessionId, 'PASSENGER_ENDED', passenger.id);
   }
 
   async endByCrew(actor: Actor, sessionId: string): Promise<UsageSession> {
     this.authorizer.requireCrewLead(actor);
-    return this.endSession(sessionId, 'CREW_ENDED');
+    return this.endSession(actor, sessionId, 'CREW_ENDED');
   }
 
   private async endSession(
+    actor: Actor,
     sessionId: string,
     reason: EndReason,
     ownerId?: string,
@@ -100,8 +158,18 @@ export class UsageService {
       if (!session || (ownerId !== undefined && session.passengerId !== ownerId)) {
         throw new SessionNotFoundError(sessionId);
       }
-      session.end(this.clock.now(), reason);
+      const endedAt = this.clock.now();
+      session.end(endedAt, reason);
       await this.sessions.save(session);
+      await this.events.publish({
+        type: 'UsageEnded',
+        occurredAt: endedAt,
+        actor: toEventActor(actor),
+        passengerId: session.passengerId,
+        resourceId: session.resourceId,
+        sessionId: session.id,
+        endReason: reason,
+      });
       return session;
     });
   }
@@ -112,13 +180,5 @@ export class UsageService {
       throw new ResourceNotFoundError(id);
     }
     return resource;
-  }
-
-  private async requireActivePassenger(id: string): Promise<Passenger> {
-    const passenger = await this.passengers.findById(id);
-    if (!passenger || passenger.status !== 'ACTIVE') {
-      throw new AuthenticationError('Unknown or inactive actor.');
-    }
-    return passenger;
   }
 }

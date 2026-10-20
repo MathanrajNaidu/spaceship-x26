@@ -12,6 +12,7 @@ import {
   InvalidResourceTypeError,
   InvalidTierError,
 } from '../../src/domain/errors/ValidationError.js';
+import { InProcessEventBus } from '../../src/infrastructure/events/InProcessEventBus.js';
 import { InMemoryPassengerRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryPassengerRepository.js';
 import { InMemoryResourceRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryResourceRepository.js';
 import { FakeClock } from '../support/FakeClock.js';
@@ -25,8 +26,16 @@ function harness() {
   const passengers = new InMemoryPassengerRepository();
   const resources = new InMemoryResourceRepository();
   const authorizer = new Authorizer();
-  const passengerService = new PassengerService(authorizer, passengers, ids, clock);
-  const resourceService = new ResourceService(authorizer, resources, passengers, ids, clock);
+  const events = new InProcessEventBus();
+  const passengerService = new PassengerService(authorizer, passengers, ids, clock, events);
+  const resourceService = new ResourceService(
+    authorizer,
+    resources,
+    passengers,
+    ids,
+    clock,
+    events,
+  );
   return { clock, passengers, resources, passengerService, resourceService };
 }
 

@@ -20,6 +20,7 @@ import {
   ResourceNotFoundError,
   SessionNotFoundError,
 } from '../../src/domain/errors/NotFoundError.js';
+import { InProcessEventBus } from '../../src/infrastructure/events/InProcessEventBus.js';
 import { InMemoryPassengerRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryPassengerRepository.js';
 import { InMemoryResourceRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryResourceRepository.js';
 import { InMemoryUsageSessionRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryUsageSessionRepository.js';
@@ -35,8 +36,16 @@ function harness() {
   const resources = new InMemoryResourceRepository();
   const sessions = new InMemoryUsageSessionRepository();
   const authorizer = new Authorizer();
-  const passengerService = new PassengerService(authorizer, passengers, ids, clock);
-  const resourceService = new ResourceService(authorizer, resources, passengers, ids, clock);
+  const events = new InProcessEventBus();
+  const passengerService = new PassengerService(authorizer, passengers, ids, clock, events);
+  const resourceService = new ResourceService(
+    authorizer,
+    resources,
+    passengers,
+    ids,
+    clock,
+    events,
+  );
   const usageService = new UsageService(
     authorizer,
     passengers,
@@ -46,6 +55,7 @@ function harness() {
     ids,
     clock,
     new KeyedMutex(),
+    events,
   );
   return {
     clock,
@@ -205,6 +215,7 @@ describe('UsageService.endUsage', () => {
     expect(ended.durationMs(clock.now())).toBe(90_000);
     const stored = await sessions.findById(started.id);
     expect(stored?.isActive).toBe(false);
+    await expect(usageService.listOwn(actor)).resolves.toHaveLength(1);
     await expect(usageService.listOwn(actor, 'ended')).resolves.toHaveLength(1);
     await expect(usageService.listOwn(actor, 'active')).resolves.toHaveLength(0);
     await expect(usageService.endOwn(actor, started.id)).rejects.toBeInstanceOf(

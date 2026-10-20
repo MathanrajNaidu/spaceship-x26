@@ -1,7 +1,9 @@
 import type { Actor } from '../auth/Actor.js';
 import type { Authorizer } from '../auth/Authorizer.js';
+import { toEventActor } from '../auth/eventActor.js';
 import { slicePage, type Page } from '../pagination.js';
 import type { Clock } from '../ports/Clock.js';
+import type { EventPublisher } from '../ports/EventPublisher.js';
 import type { IdGenerator } from '../ports/IdGenerator.js';
 import type { PassengerRepository } from '../ports/PassengerRepository.js';
 import type { ResourceRepository, ResourceSearch } from '../ports/ResourceRepository.js';
@@ -52,6 +54,7 @@ export class ResourceService {
     private readonly passengers: PassengerRepository,
     private readonly ids: IdGenerator,
     private readonly clock: Clock,
+    private readonly events: EventPublisher,
   ) {}
 
   async provision(actor: Actor, input: ProvisionResourceInput): Promise<Resource> {
@@ -70,6 +73,15 @@ export class ResourceService {
       now: this.clock.now(),
     });
     await this.resources.save(resource);
+    await this.events.publish({
+      type: 'ResourceProvisioned',
+      occurredAt: resource.provisionedAt,
+      actor: toEventActor(actor),
+      resourceId: resource.id,
+      name: resource.name,
+      resourceType: resource.type,
+      minimumTier: resource.minimumTier.name,
+    });
     return resource;
   }
 
