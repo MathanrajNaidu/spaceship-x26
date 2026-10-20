@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Authorizer } from '../../src/application/auth/Authorizer.js';
 import type { Actor } from '../../src/application/auth/Actor.js';
+import { KeyedMutex } from '../../src/application/concurrency/KeyedMutex.js';
 import { PassengerService } from '../../src/application/services/PassengerService.js';
 import { ResourceService } from '../../src/application/services/ResourceService.js';
 import { UsageService } from '../../src/application/services/UsageService.js';
@@ -40,6 +41,7 @@ function harness() {
     new TierAccessPolicy(),
     ids,
     clock,
+    new KeyedMutex(),
   );
   return {
     clock,
@@ -156,5 +158,28 @@ describe('UsageService.startUsage', () => {
       usageService.startUsage(passengerActor('ghost', 'Ghost'), food.id),
     ).rejects.toBeInstanceOf(AuthenticationError);
     await expect(usageService.startUsage(crew, food.id)).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it('gives exactly one success when five starts race a capacity of one', async () => {
+    const { usageService, passengerService, resourceService } = harness();
+    const pod = await resourceService.provision(crew, {
+      name: 'Sleeping Pod 1',
+      type: 'SLEEPING_POD',
+      capacity: 1,
+    });
+    const actors = [];
+    for (const name of ['Ada Guest', 'Bao Guest', 'Mira Guest', 'Jonah Hale', 'Priya Nair']) {
+      const passenger = await passengerService.create(crew, { name, tier: 'SILVER' });
+      actors.push(passengerActor(passenger.id, passenger.name));
+    }
+    const results = await Promise.allSettled(
+      actors.map((actor) => usageService.startUsage(actor, pod.id)),
+    );
+    const successes = results.filter((result) => result.status === 'fulfilled');
+    const denials = results.filter(
+      (result) => result.status === 'rejected' && result.reason instanceof CapacityExceededError,
+    );
+    expect(successes).toHaveLength(1);
+    expect(denials).toHaveLength(4);
   });
 });

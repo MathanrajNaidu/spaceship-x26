@@ -1,5 +1,6 @@
 import type { Actor } from '../auth/Actor.js';
 import type { Authorizer } from '../auth/Authorizer.js';
+import type { KeyedMutex } from '../concurrency/KeyedMutex.js';
 import type { Clock } from '../ports/Clock.js';
 import type { IdGenerator } from '../ports/IdGenerator.js';
 import type { PassengerRepository } from '../ports/PassengerRepository.js';
@@ -27,11 +28,12 @@ export class UsageService {
     private readonly policy: AccessPolicy,
     private readonly ids: IdGenerator,
     private readonly clock: Clock,
+    private readonly mutex: KeyedMutex,
   ) {}
 
   async startUsage(actor: Actor, resourceId: string): Promise<UsageSession> {
     this.authorizer.requirePassenger(actor);
-    return this.startUsageUnlocked(actor, resourceId);
+    return this.mutex.runExclusive(resourceId, () => this.startUsageUnlocked(actor, resourceId));
   }
 
   private async startUsageUnlocked(actor: Actor, resourceId: string): Promise<UsageSession> {
