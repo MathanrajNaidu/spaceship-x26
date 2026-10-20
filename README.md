@@ -14,6 +14,10 @@ npm run dev
 
 The API listens on `http://127.0.0.1:4317` unless `PORT` or `HOST` is set.
 
+## Try it in the browser
+
+Run `npm run dev`, then open http://127.0.0.1:4317/docs. Authorize with `X-Actor-Id` set to a seeded id such as `crew-ada` or `pas-jonah`. The raw document is at `/openapi.json`.
+
 | Script                  | What it does                                         |
 | ----------------------- | ---------------------------------------------------- |
 | `npm run dev`           | Run the API with a reload on change                  |
