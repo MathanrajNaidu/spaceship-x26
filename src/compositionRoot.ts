@@ -3,9 +3,12 @@ import type { Express } from 'express';
 import { Authorizer } from './application/auth/Authorizer.js';
 import { KeyedMutex } from './application/concurrency/KeyedMutex.js';
 import { CrewLeadQuery } from './application/services/CrewLeadQuery.js';
+import { AuditService } from './application/services/AuditService.js';
 import { PassengerService } from './application/services/PassengerService.js';
 import { ResourceService } from './application/services/ResourceService.js';
+import { UsageService } from './application/services/UsageService.js';
 import { AuditLogSubscriber } from './application/subscribers/AuditLogSubscriber.js';
+import { TierAccessPolicy } from './domain/access/TierAccessPolicy.js';
 import { CrewLead } from './domain/crew/CrewLead.js';
 import { CrewRoster } from './domain/crew/CrewRoster.js';
 import { createApp } from './http/app.js';
@@ -36,7 +39,8 @@ export async function buildApplication(env: NodeJS.ProcessEnv): Promise<Applicat
   const clock = new SystemClock();
   const ids = new UuidGenerator();
   const events = new InProcessEventBus();
-  events.subscribe(new AuditLogSubscriber(new InMemoryAuditLogRepository(), ids));
+  const auditLog = new InMemoryAuditLogRepository();
+  events.subscribe(new AuditLogSubscriber(auditLog, ids));
   const sessions = new InMemoryUsageSessionRepository();
   const mutex = new KeyedMutex();
   const passengerService = new PassengerService(
@@ -49,6 +53,18 @@ export async function buildApplication(env: NodeJS.ProcessEnv): Promise<Applicat
     resources,
     mutex,
   );
+  const usageService = new UsageService(
+    authorizer,
+    passengers,
+    resources,
+    sessions,
+    new TierAccessPolicy(),
+    ids,
+    clock,
+    mutex,
+    events,
+  );
+  const auditService = new AuditService(authorizer, auditLog);
   const resourceService = new ResourceService(
     authorizer,
     resources,
@@ -70,6 +86,8 @@ export async function buildApplication(env: NodeJS.ProcessEnv): Promise<Applicat
     actorResolver: new RosterActorResolver(roster, passengers),
     passengerService,
     resourceService,
+    usageService,
+    auditService,
     crewLeadQuery: new CrewLeadQuery(roster, authorizer),
   });
   return { app, config, roster };

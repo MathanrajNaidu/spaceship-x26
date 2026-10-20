@@ -39,6 +39,12 @@ export function resourceController(service: ResourceService) {
       });
     },
 
+    decommission: async (req: Request, res: Response): Promise<void> => {
+      const { id } = idParamsSchema.parse(req.params);
+      const resource = await service.decommission(requireActor(req), id);
+      res.json({ resource: toResourceDto(resource) });
+    },
+
     discover: async (req: Request, res: Response): Promise<void> => {
       const query = discoverySchema.parse(req.query);
       const page = await service.discover(requireActor(req), query);

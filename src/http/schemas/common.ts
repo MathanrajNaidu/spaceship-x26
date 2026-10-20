@@ -3,8 +3,15 @@ import { z } from 'zod';
 import { RESOURCE_TYPES } from '../../domain/resource/ResourceType.js';
 import { TIERS } from '../../domain/tier/MembershipTier.js';
 
-const blankToUndefined = (value: unknown): unknown =>
+export const blankToUndefined = (value: unknown): unknown =>
   value === '' || value === undefined ? undefined : value;
+
+export const optionalTextSchema = z.preprocess(blankToUndefined, z.string().min(1).optional());
+
+export const optionalInstantSchema = z.preprocess(
+  blankToUndefined,
+  z.iso.datetime({ offset: true }).optional(),
+);
 
 export const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
