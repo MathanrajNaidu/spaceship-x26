@@ -1,7 +1,7 @@
 import type { ErrorRequestHandler, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
-import type { ErrorLogger } from '../logging.js';
+import type { AppLogger } from '../logging.js';
 import { HttpProblem } from './HttpProblem.js';
 import { AccessDeniedError } from '../../domain/errors/AccessDeniedError.js';
 import { AuthenticationError } from '../../domain/errors/AuthenticationError.js';
@@ -21,7 +21,7 @@ interface ErrorBody {
   };
 }
 
-export function errorHandler(logger: ErrorLogger): ErrorRequestHandler {
+export function errorHandler(logger: AppLogger): ErrorRequestHandler {
   return (err: unknown, req: Request, res: Response, next) => {
     if (res.headersSent) {
       next(err);

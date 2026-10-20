@@ -3,6 +3,7 @@ import { KeyedMutex } from '../../src/application/concurrency/KeyedMutex.js';
 import { CrewLeadQuery } from '../../src/application/services/CrewLeadQuery.js';
 import { AuditService } from '../../src/application/services/AuditService.js';
 import { PassengerService } from '../../src/application/services/PassengerService.js';
+import { ReportingService } from '../../src/application/services/ReportingService.js';
 import { ResourceService } from '../../src/application/services/ResourceService.js';
 import { UsageService } from '../../src/application/services/UsageService.js';
 import { AuditLogSubscriber } from '../../src/application/subscribers/AuditLogSubscriber.js';
@@ -63,6 +64,15 @@ export function buildTestApp(now = new Date('2026-06-01T00:00:00.000Z')) {
     events,
   );
   const auditService = new AuditService(authorizer, auditLog);
+  const reportingService = new ReportingService(
+    authorizer,
+    passengers,
+    resources,
+    sessions,
+    clock,
+    auditLog,
+    { highUtilisation: 0.8, highDenials: 3, lowUtilisation: 0.2 },
+  );
   const resourceService = new ResourceService(
     authorizer,
     resources,
@@ -79,6 +89,7 @@ export function buildTestApp(now = new Date('2026-06-01T00:00:00.000Z')) {
     resourceService,
     usageService,
     auditService,
+    reportingService,
     crewLeadQuery: new CrewLeadQuery(roster, authorizer),
   });
   return { app, clock, ids, passengers, resources, passengerService, resourceService, roster };

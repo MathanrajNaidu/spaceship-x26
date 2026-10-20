@@ -5,6 +5,7 @@ import { KeyedMutex } from './application/concurrency/KeyedMutex.js';
 import { CrewLeadQuery } from './application/services/CrewLeadQuery.js';
 import { AuditService } from './application/services/AuditService.js';
 import { PassengerService } from './application/services/PassengerService.js';
+import { ReportingService } from './application/services/ReportingService.js';
 import { ResourceService } from './application/services/ResourceService.js';
 import { UsageService } from './application/services/UsageService.js';
 import { AuditLogSubscriber } from './application/subscribers/AuditLogSubscriber.js';
@@ -22,6 +23,7 @@ import { InMemoryResourceRepository } from './infrastructure/persistence/in-memo
 import { InMemoryUsageSessionRepository } from './infrastructure/persistence/in-memory/InMemoryUsageSessionRepository.js';
 import { DEFAULT_CREW_LEADS } from './infrastructure/seed/missionSeed.js';
 import { seedMission } from './infrastructure/seed/seedMission.js';
+import { createLogger } from './infrastructure/logging/createLogger.js';
 import { SystemClock } from './infrastructure/time/SystemClock.js';
 
 export interface ApplicationRuntime {
@@ -65,6 +67,15 @@ export async function buildApplication(env: NodeJS.ProcessEnv): Promise<Applicat
     events,
   );
   const auditService = new AuditService(authorizer, auditLog);
+  const reportingService = new ReportingService(
+    authorizer,
+    passengers,
+    resources,
+    sessions,
+    clock,
+    auditLog,
+    config.demand,
+  );
   const resourceService = new ResourceService(
     authorizer,
     resources,
@@ -88,7 +99,9 @@ export async function buildApplication(env: NodeJS.ProcessEnv): Promise<Applicat
     resourceService,
     usageService,
     auditService,
+    reportingService,
     crewLeadQuery: new CrewLeadQuery(roster, authorizer),
+    logger: createLogger(config.logLevel),
   });
   return { app, config, roster };
 }
