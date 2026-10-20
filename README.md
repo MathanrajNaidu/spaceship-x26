@@ -222,4 +222,26 @@ Notable cases: five parallel starts on a capacity-1 resource yield one success a
 
 ## AI Usage Disclosure
 
-TODO: fill this section in yourself before you submit. Say which tools you used, what you asked them to do, what you kept, what you changed, and what you checked by hand. Leave the placeholder out of the version you send to reviewers.
+**Which AI tool did I use?**
+Cursor, mainly its background (cloud) agents.
+
+**Why Cursor?**
+
+- Its agents work directly against a Git repository on a branch and open pull requests, which fit my plan to deliver one reviewable PR per level.
+- They run the test suite, linter and type checker as they work, which suits a test-first workflow and kept every commit green.
+- It understands the whole codebase rather than single files, so changes followed the established layering and conventions.
+- I could run work in the background and review the results as PRs, the same way I review a teammate's work.
+
+**How did I use it?**
+
+1. I wrote and agreed the design first (`DESIGN.md`): the domain model, layering, patterns, error model, assumptions and a commit-by-commit build order.
+2. Cursor agents implemented the design level by level, test-first, in small conventional commits.
+3. I reviewed each level's PR for correctness against the brief, SOLID and OOP design, readability, and test quality, and requested changes where needed (for example, fixing CI formatting and adding OpenAPI docs).
+
+**Which parts were AI-assisted?**
+
+- AI-generated, then reviewed by me: most of the production code, the tests, the CI workflow, the Dockerfile and the OpenAPI document.
+- Mine: the overall architecture and design choices, how I read ambiguous requirements (listed under Assumptions and Open Questions), the trade-offs, and the final review of everything submitted.
+
+**Workflow and prompts**
+I gave the agents `DESIGN.md` plus the challenge brief, with these instructions: build to the design one level at a time, write tests before implementation, keep commits small and conventional, and keep lint, typecheck and tests passing in CI. I own the final solution and can walk through any part of it.
