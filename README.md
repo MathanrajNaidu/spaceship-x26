@@ -14,6 +14,10 @@ npm run dev
 
 The API listens on `http://127.0.0.1:4317` unless `PORT` or `HOST` is set.
 
+## Try it in the browser
+
+Run `npm run dev`, then open http://127.0.0.1:4317/docs. Authorize with `X-Actor-Id` set to a seeded id such as `crew-ada` or `pas-jonah`. The raw document is at `/openapi.json`.
+
 | Script                  | What it does                                         |
 | ----------------------- | ---------------------------------------------------- |
 | `npm run dev`           | Run the API with a reload on change                  |
@@ -216,7 +220,6 @@ Notable cases: five parallel starts on a capacity-1 resource yield one success a
 - Atomic crew-lead replacement that keeps the roster at exactly three.
 - A maximum session duration per resource type, and a queue for HIGH-demand resources.
 - An outbox so the audit entry and the state change commit together.
-- An OpenAPI document generated from the zod schemas.
 - Capacity changes on a live resource, rejected when the new capacity is below occupancy, and a maintenance state.
 - Metrics.
 
