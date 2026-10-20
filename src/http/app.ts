@@ -13,6 +13,7 @@ import { passengerController } from './controllers/passenger.controller.js';
 import { reportController } from './controllers/report.controller.js';
 import { resourceController } from './controllers/resource.controller.js';
 import { sessionController } from './controllers/session.controller.js';
+import { mountDocs } from './docs.js';
 import { errorHandler } from './errors/errorHandler.js';
 import './httpTypes.js';
 import { noopLogger, type AppLogger } from './logging.js';
@@ -75,6 +76,8 @@ export function createApp(deps: AppDependencies): Express {
   app.get('/api/v1/reports/active-usage', auth, reports.activeUsage);
   app.get('/api/v1/reports/usage-by-tier', auth, reports.usageByTier);
   app.get('/api/v1/reports/resource-demand', auth, reports.resourceDemand);
+
+  mountDocs(app);
 
   app.use(notFound);
   app.use(errorHandler(deps.logger ?? noopLogger));
