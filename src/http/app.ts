@@ -5,10 +5,12 @@ import type { AuditService } from '../application/services/AuditService.js';
 import type { CrewLeadQuery } from '../application/services/CrewLeadQuery.js';
 import type { PassengerService } from '../application/services/PassengerService.js';
 import type { ResourceService } from '../application/services/ResourceService.js';
+import type { ReportingService } from '../application/services/ReportingService.js';
 import type { UsageService } from '../application/services/UsageService.js';
 import { auditController } from './controllers/audit.controller.js';
 import { crewController } from './controllers/crew.controller.js';
 import { passengerController } from './controllers/passenger.controller.js';
+import { reportController } from './controllers/report.controller.js';
 import { resourceController } from './controllers/resource.controller.js';
 import { sessionController } from './controllers/session.controller.js';
 import { errorHandler } from './errors/errorHandler.js';
@@ -24,6 +26,7 @@ export interface AppDependencies {
   resourceService: ResourceService;
   usageService: UsageService;
   auditService: AuditService;
+  reportingService: ReportingService;
   crewLeadQuery: CrewLeadQuery;
   logger?: ErrorLogger;
 }
@@ -39,6 +42,7 @@ export function createApp(deps: AppDependencies): Express {
   const resources = resourceController(deps.resourceService);
   const sessions = sessionController(deps.usageService);
   const audit = auditController(deps.auditService);
+  const reports = reportController(deps.reportingService);
   const crew = crewController(deps.crewLeadQuery);
 
   app.get('/api/v1/health', (_req, res) => {
@@ -51,6 +55,7 @@ export function createApp(deps: AppDependencies): Express {
   app.patch('/api/v1/passengers/:id', auth, passengers.update);
   app.put('/api/v1/passengers/:id/tier', auth, passengers.changeTier);
   app.post('/api/v1/passengers/:id/deactivate', auth, passengers.deactivate);
+  app.get('/api/v1/passengers/:id/history', auth, reports.passengerHistory);
   app.post('/api/v1/resources', auth, resources.provision);
   app.get('/api/v1/resources', auth, resources.list);
   app.get('/api/v1/resources/:id', auth, resources.get);
@@ -59,9 +64,13 @@ export function createApp(deps: AppDependencies): Express {
   app.get('/api/v1/me/resources', auth, resources.discover);
   app.post('/api/v1/me/sessions', auth, sessions.start);
   app.get('/api/v1/me/sessions', auth, sessions.listMine);
+  app.get('/api/v1/me/history', auth, reports.ownHistory);
   app.post('/api/v1/me/sessions/:id/end', auth, sessions.endMine);
   app.post('/api/v1/sessions/:id/end', auth, sessions.endByCrew);
   app.get('/api/v1/audit-log', auth, audit.list);
+  app.get('/api/v1/reports/active-usage', auth, reports.activeUsage);
+  app.get('/api/v1/reports/usage-by-tier', auth, reports.usageByTier);
+  app.get('/api/v1/reports/resource-demand', auth, reports.resourceDemand);
 
   app.use(notFound);
   app.use(errorHandler(deps.logger ?? noopLogger));

@@ -5,6 +5,7 @@ import { KeyedMutex } from './application/concurrency/KeyedMutex.js';
 import { CrewLeadQuery } from './application/services/CrewLeadQuery.js';
 import { AuditService } from './application/services/AuditService.js';
 import { PassengerService } from './application/services/PassengerService.js';
+import { ReportingService } from './application/services/ReportingService.js';
 import { ResourceService } from './application/services/ResourceService.js';
 import { UsageService } from './application/services/UsageService.js';
 import { AuditLogSubscriber } from './application/subscribers/AuditLogSubscriber.js';
@@ -65,6 +66,15 @@ export async function buildApplication(env: NodeJS.ProcessEnv): Promise<Applicat
     events,
   );
   const auditService = new AuditService(authorizer, auditLog);
+  const reportingService = new ReportingService(
+    authorizer,
+    passengers,
+    resources,
+    sessions,
+    clock,
+    auditLog,
+    config.demand,
+  );
   const resourceService = new ResourceService(
     authorizer,
     resources,
@@ -88,6 +98,7 @@ export async function buildApplication(env: NodeJS.ProcessEnv): Promise<Applicat
     resourceService,
     usageService,
     auditService,
+    reportingService,
     crewLeadQuery: new CrewLeadQuery(roster, authorizer),
   });
   return { app, config, roster };
