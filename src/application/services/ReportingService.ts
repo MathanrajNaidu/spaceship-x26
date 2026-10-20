@@ -15,7 +15,7 @@ import { peakConcurrency } from '../reporting/peakConcurrency.js';
 import { assertTimeRange } from '../timeRange.js';
 import { AuthenticationError } from '../../domain/errors/AuthenticationError.js';
 import { PassengerNotFoundError } from '../../domain/errors/NotFoundError.js';
-import type { ResourceStatus } from '../../domain/resource/Resource.js';
+import type { Resource, ResourceStatus } from '../../domain/resource/Resource.js';
 import { RESOURCE_TYPES, type ResourceType } from '../../domain/resource/ResourceType.js';
 import { TIERS, type TierName } from '../../domain/tier/MembershipTier.js';
 import type { UsageSession } from '../../domain/usage/UsageSession.js';
@@ -57,6 +57,21 @@ export interface TierUsageGroup {
   readonly sessions: number;
   readonly totalDurationMs: number;
   readonly topResources: readonly TopResource[];
+}
+
+export interface ActiveUsageResource {
+  readonly resource: Resource;
+  readonly occupancy: {
+    readonly active: number;
+    readonly capacity: number;
+    readonly availableSlots: number;
+  };
+  readonly sessions: readonly UsageSession[];
+}
+
+export interface ActiveUsageSnapshot {
+  readonly generatedAt: Date;
+  readonly resources: readonly ActiveUsageResource[];
 }
 
 export interface ResourceDemandRow {
@@ -224,6 +239,27 @@ export class ReportingService {
       rows.push(row);
     }
     return rows.sort(compareDemand);
+  }
+
+  async activeUsage(actor: Actor): Promise<ActiveUsageSnapshot> {
+    this.authorizer.requireCrewLead(actor);
+    const resources = await this.resources.search({ status: 'ACTIVE' });
+    const active = await this.sessions.listActive();
+    return {
+      generatedAt: this.clock.now(),
+      resources: resources.map((resource) => {
+        const sessions = active.filter((session) => session.resourceId === resource.id);
+        return {
+          resource,
+          occupancy: {
+            active: sessions.length,
+            capacity: resource.capacity,
+            availableSlots: resource.capacity - sessions.length,
+          },
+          sessions,
+        };
+      }),
+    };
   }
 
   private async assemble(passengerId: string, query: HistoryQuery): Promise<UsageHistory> {
