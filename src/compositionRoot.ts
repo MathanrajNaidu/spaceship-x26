@@ -23,6 +23,7 @@ import { InMemoryResourceRepository } from './infrastructure/persistence/in-memo
 import { InMemoryUsageSessionRepository } from './infrastructure/persistence/in-memory/InMemoryUsageSessionRepository.js';
 import { DEFAULT_CREW_LEADS } from './infrastructure/seed/missionSeed.js';
 import { seedMission } from './infrastructure/seed/seedMission.js';
+import { createLogger } from './infrastructure/logging/createLogger.js';
 import { SystemClock } from './infrastructure/time/SystemClock.js';
 
 export interface ApplicationRuntime {
@@ -100,6 +101,7 @@ export async function buildApplication(env: NodeJS.ProcessEnv): Promise<Applicat
     auditService,
     reportingService,
     crewLeadQuery: new CrewLeadQuery(roster, authorizer),
+    logger: createLogger(config.logLevel),
   });
   return { app, config, roster };
 }

@@ -15,7 +15,8 @@ import { resourceController } from './controllers/resource.controller.js';
 import { sessionController } from './controllers/session.controller.js';
 import { errorHandler } from './errors/errorHandler.js';
 import './httpTypes.js';
-import { noopLogger, type ErrorLogger } from './logging.js';
+import { noopLogger, type AppLogger } from './logging.js';
+import { requestLog } from './middleware/requestLog.js';
 import { notFound } from './middleware/notFound.js';
 import { requestId } from './middleware/requestId.js';
 import { resolveActor } from './middleware/resolveActor.js';
@@ -28,7 +29,7 @@ export interface AppDependencies {
   auditService: AuditService;
   reportingService: ReportingService;
   crewLeadQuery: CrewLeadQuery;
-  logger?: ErrorLogger;
+  logger?: AppLogger;
 }
 
 export function createApp(deps: AppDependencies): Express {
@@ -36,6 +37,9 @@ export function createApp(deps: AppDependencies): Express {
   app.disable('x-powered-by');
   app.use(requestId);
   app.use(express.json({ limit: '100kb' }));
+  if (deps.logger) {
+    app.use(requestLog(deps.logger));
+  }
 
   const auth = resolveActor(deps.actorResolver);
   const passengers = passengerController(deps.passengerService);

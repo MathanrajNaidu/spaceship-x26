@@ -2,8 +2,9 @@ import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 
-import { buildTestApp } from '../support/buildTestApp.js';
 import { toErrorBody, errorHandler } from '../../src/http/errors/errorHandler.js';
+import type { AppLogger } from '../../src/http/logging.js';
+import { buildTestApp } from '../support/buildTestApp.js';
 
 interface ErrorResponse {
   error: {
@@ -17,7 +18,6 @@ interface ErrorResponse {
 function errorOf(response: { body: unknown }): ErrorResponse['error'] {
   return (response.body as ErrorResponse).error;
 }
-import type { ErrorLogger } from '../../src/http/logging.js';
 import { AccessDeniedError } from '../../src/domain/errors/AccessDeniedError.js';
 import { AuthenticationError } from '../../src/domain/errors/AuthenticationError.js';
 import { AuthorizationError } from '../../src/domain/errors/AuthorizationError.js';
@@ -82,9 +82,12 @@ describe('createApp', () => {
 
   it('hides unexpected failures behind a generic 500 and logs the cause', async () => {
     const logged: unknown[] = [];
-    const logger: ErrorLogger = {
+    const logger: AppLogger = {
       error(context) {
         logged.push(context);
+      },
+      info() {
+        return undefined;
       },
     };
     const app = express();

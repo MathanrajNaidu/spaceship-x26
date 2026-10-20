@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { buildApplication } from '../../src/compositionRoot.js';
 import { CrewRosterInvariantError } from '../../src/domain/errors/InvariantViolationError.js';
 import { ConfigError } from '../../src/infrastructure/config/env.js';
-import { startServer } from '../../src/server.js';
+import { closeServer, shutdownHandler, startServer } from '../../src/server.js';
 
 const baseEnv = { SEED_DEMO_PASSENGERS: 'true', LOG_LEVEL: 'silent' };
 
@@ -104,8 +104,26 @@ describe('boot', () => {
     }
     const response = await fetch(`http://127.0.0.1:${address.port}/api/v1/health`);
     expect(response.status).toBe(200);
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
+    await closeServer(server);
+    await closeServer(server);
+  });
+
+  it('closes the listener once when shutdown runs twice', async () => {
+    const { app } = await buildApplication({ SEED_DEMO_PASSENGERS: 'false', LOG_LEVEL: 'silent' });
+    const server = await startServer(app, 0, '127.0.0.1');
+    const codes: number[] = [];
+    let release: () => void = () => undefined;
+    const closed = new Promise<void>((resolve) => {
+      release = resolve;
     });
+    const stop = shutdownHandler(server, (code) => {
+      codes.push(code);
+      release();
+    });
+    stop();
+    stop();
+    await closed;
+    expect(codes).toEqual([0]);
+    expect(server.listening).toBe(false);
   });
 });
