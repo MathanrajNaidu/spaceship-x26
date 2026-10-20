@@ -1,17 +1,25 @@
 import type { Express } from 'express';
 
 import { Authorizer } from './application/auth/Authorizer.js';
+import { KeyedMutex } from './application/concurrency/KeyedMutex.js';
 import { CrewLeadQuery } from './application/services/CrewLeadQuery.js';
+import { AuditService } from './application/services/AuditService.js';
 import { PassengerService } from './application/services/PassengerService.js';
 import { ResourceService } from './application/services/ResourceService.js';
+import { UsageService } from './application/services/UsageService.js';
+import { AuditLogSubscriber } from './application/subscribers/AuditLogSubscriber.js';
+import { TierAccessPolicy } from './domain/access/TierAccessPolicy.js';
 import { CrewLead } from './domain/crew/CrewLead.js';
 import { CrewRoster } from './domain/crew/CrewRoster.js';
 import { createApp } from './http/app.js';
+import { InProcessEventBus } from './infrastructure/events/InProcessEventBus.js';
 import { RosterActorResolver } from './infrastructure/auth/RosterActorResolver.js';
 import { loadConfig, type AppConfig } from './infrastructure/config/env.js';
 import { UuidGenerator } from './infrastructure/ids/UuidGenerator.js';
+import { InMemoryAuditLogRepository } from './infrastructure/persistence/in-memory/InMemoryAuditLogRepository.js';
 import { InMemoryPassengerRepository } from './infrastructure/persistence/in-memory/InMemoryPassengerRepository.js';
 import { InMemoryResourceRepository } from './infrastructure/persistence/in-memory/InMemoryResourceRepository.js';
+import { InMemoryUsageSessionRepository } from './infrastructure/persistence/in-memory/InMemoryUsageSessionRepository.js';
 import { DEFAULT_CREW_LEADS } from './infrastructure/seed/missionSeed.js';
 import { seedMission } from './infrastructure/seed/seedMission.js';
 import { SystemClock } from './infrastructure/time/SystemClock.js';
@@ -30,8 +38,43 @@ export async function buildApplication(env: NodeJS.ProcessEnv): Promise<Applicat
   const authorizer = new Authorizer();
   const clock = new SystemClock();
   const ids = new UuidGenerator();
-  const passengerService = new PassengerService(authorizer, passengers, ids, clock);
-  const resourceService = new ResourceService(authorizer, resources, passengers, ids, clock);
+  const events = new InProcessEventBus();
+  const auditLog = new InMemoryAuditLogRepository();
+  events.subscribe(new AuditLogSubscriber(auditLog, ids));
+  const sessions = new InMemoryUsageSessionRepository();
+  const mutex = new KeyedMutex();
+  const passengerService = new PassengerService(
+    authorizer,
+    passengers,
+    ids,
+    clock,
+    events,
+    sessions,
+    resources,
+    mutex,
+  );
+  const usageService = new UsageService(
+    authorizer,
+    passengers,
+    resources,
+    sessions,
+    new TierAccessPolicy(),
+    ids,
+    clock,
+    mutex,
+    events,
+  );
+  const auditService = new AuditService(authorizer, auditLog);
+  const resourceService = new ResourceService(
+    authorizer,
+    resources,
+    passengers,
+    ids,
+    clock,
+    events,
+    sessions,
+    mutex,
+  );
   const lead = roster.leads[0];
   await seedMission({
     lead,
@@ -43,6 +86,8 @@ export async function buildApplication(env: NodeJS.ProcessEnv): Promise<Applicat
     actorResolver: new RosterActorResolver(roster, passengers),
     passengerService,
     resourceService,
+    usageService,
+    auditService,
     crewLeadQuery: new CrewLeadQuery(roster, authorizer),
   });
   return { app, config, roster };

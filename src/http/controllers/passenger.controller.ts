@@ -1,8 +1,10 @@
 import type { Request, Response } from 'express';
 
 import type { PassengerService } from '../../application/services/PassengerService.js';
-import type { Passenger } from '../../domain/passenger/Passenger.js';
+import { toPassengerDto } from '../presenters/passengerPresenter.js';
+import { toSessionDto } from '../presenters/sessionPresenter.js';
 import {
+  changeTierSchema,
   createPassengerSchema,
   passengerListSchema,
   updatePassengerSchema,
@@ -47,16 +49,29 @@ export function passengerController(service: PassengerService) {
       const passenger = await service.getOwn(requireActor(req));
       res.json({ passenger: toPassengerDto(passenger) });
     },
-  };
-}
 
-function toPassengerDto(passenger: Passenger) {
-  return {
-    id: passenger.id,
-    name: passenger.name,
-    tier: passenger.tier.name,
-    status: passenger.status,
-    createdAt: passenger.createdAt.toISOString(),
-    updatedAt: passenger.updatedAt.toISOString(),
+    changeTier: async (req: Request, res: Response): Promise<void> => {
+      const { id } = idParamsSchema.parse(req.params);
+      const body = changeTierSchema.parse(req.body);
+      const result = await service.changeTier(requireActor(req), id, body.tier);
+      res.json({
+        passenger: toPassengerDto(result.passenger),
+        change: {
+          from: result.change.from.name,
+          to: result.change.to.name,
+          direction: result.change.direction,
+        },
+        endedSessions: result.endedSessions.map(toSessionDto),
+      });
+    },
+
+    deactivate: async (req: Request, res: Response): Promise<void> => {
+      const { id } = idParamsSchema.parse(req.params);
+      const result = await service.deactivate(requireActor(req), id);
+      res.json({
+        passenger: toPassengerDto(result.passenger),
+        endedSessions: result.endedSessions.map(toSessionDto),
+      });
+    },
   };
 }

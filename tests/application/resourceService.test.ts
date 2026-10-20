@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Actor } from '../../src/application/auth/Actor.js';
 import { Authorizer } from '../../src/application/auth/Authorizer.js';
+import { KeyedMutex } from '../../src/application/concurrency/KeyedMutex.js';
 import { PassengerService } from '../../src/application/services/PassengerService.js';
 import { ResourceService } from '../../src/application/services/ResourceService.js';
 import { AuthenticationError } from '../../src/domain/errors/AuthenticationError.js';
@@ -12,8 +13,10 @@ import {
   InvalidResourceTypeError,
   InvalidTierError,
 } from '../../src/domain/errors/ValidationError.js';
+import { InProcessEventBus } from '../../src/infrastructure/events/InProcessEventBus.js';
 import { InMemoryPassengerRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryPassengerRepository.js';
 import { InMemoryResourceRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryResourceRepository.js';
+import { InMemoryUsageSessionRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryUsageSessionRepository.js';
 import { FakeClock } from '../support/FakeClock.js';
 import { SequentialIdGenerator } from '../support/SequentialIdGenerator.js';
 
@@ -25,9 +28,30 @@ function harness() {
   const passengers = new InMemoryPassengerRepository();
   const resources = new InMemoryResourceRepository();
   const authorizer = new Authorizer();
-  const passengerService = new PassengerService(authorizer, passengers, ids, clock);
-  const resourceService = new ResourceService(authorizer, resources, passengers, ids, clock);
-  return { clock, passengers, resources, passengerService, resourceService };
+  const events = new InProcessEventBus();
+  const sessions = new InMemoryUsageSessionRepository();
+  const mutex = new KeyedMutex();
+  const passengerService = new PassengerService(
+    authorizer,
+    passengers,
+    ids,
+    clock,
+    events,
+    sessions,
+    resources,
+    mutex,
+  );
+  const resourceService = new ResourceService(
+    authorizer,
+    resources,
+    passengers,
+    ids,
+    clock,
+    events,
+    sessions,
+    mutex,
+  );
+  return { clock, passengers, resources, sessions, passengerService, resourceService };
 }
 
 describe('ResourceService', () => {
