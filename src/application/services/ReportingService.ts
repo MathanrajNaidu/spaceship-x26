@@ -1,12 +1,21 @@
 import type { Actor } from '../auth/Actor.js';
 import type { Authorizer } from '../auth/Authorizer.js';
-import { assertTimeRange } from '../timeRange.js';
+import type { AuditLogRepository } from '../ports/AuditLogRepository.js';
 import type { Clock } from '../ports/Clock.js';
 import type { PassengerRepository } from '../ports/PassengerRepository.js';
 import type { ResourceRepository } from '../ports/ResourceRepository.js';
 import type { UsageSessionReader } from '../ports/UsageSessionRepository.js';
+import {
+  classifyDemand,
+  compareDemand,
+  type DemandLevel,
+  type DemandThresholds,
+} from '../reporting/DemandClassifier.js';
+import { peakConcurrency } from '../reporting/peakConcurrency.js';
+import { assertTimeRange } from '../timeRange.js';
 import { AuthenticationError } from '../../domain/errors/AuthenticationError.js';
 import { PassengerNotFoundError } from '../../domain/errors/NotFoundError.js';
+import type { ResourceStatus } from '../../domain/resource/Resource.js';
 import { RESOURCE_TYPES, type ResourceType } from '../../domain/resource/ResourceType.js';
 import { TIERS, type TierName } from '../../domain/tier/MembershipTier.js';
 import type { UsageSession } from '../../domain/usage/UsageSession.js';
@@ -50,6 +59,18 @@ export interface TierUsageGroup {
   readonly topResources: readonly TopResource[];
 }
 
+export interface ResourceDemandRow {
+  readonly resourceId: string;
+  readonly name: string;
+  readonly status: ResourceStatus;
+  readonly sessions: number;
+  readonly totalDurationMs: number;
+  readonly currentUtilisation: number;
+  readonly peakUtilisation: number;
+  readonly capacityDenials: number;
+  readonly demandLevel: DemandLevel;
+}
+
 interface TierBucket {
   passengers: Set<string>;
   sessions: number;
@@ -64,6 +85,8 @@ export class ReportingService {
     private readonly resources: ResourceRepository,
     private readonly sessions: UsageSessionReader,
     private readonly clock: Clock,
+    private readonly audit: AuditLogRepository,
+    private readonly thresholds: DemandThresholds,
   ) {}
 
   async ownHistory(actor: Actor, query: HistoryQuery): Promise<UsageHistory> {
@@ -142,6 +165,67 @@ export class ReportingService {
     });
   }
 
+  async resourceDemand(actor: Actor, query: HistoryQuery): Promise<readonly ResourceDemandRow[]> {
+    this.authorizer.requireCrewLead(actor);
+    assertTimeRange(query.from, query.to);
+    const now = this.clock.now();
+    const resources = await this.resources.search({});
+    const overlapping = await this.sessions.listOverlapping(
+      {
+        ...(query.from === undefined ? {} : { from: query.from }),
+        ...(query.to === undefined ? {} : { to: query.to }),
+      },
+      now,
+    );
+    const denials = await this.audit.query({
+      action: 'UsageDenied',
+      outcome: 'DENIED',
+      ...(query.from === undefined ? {} : { from: query.from }),
+      ...(query.to === undefined ? {} : { to: query.to }),
+    });
+    const denialCount = new Map<string, number>();
+    for (const entry of denials) {
+      if (entry.reason !== 'CAPACITY_EXCEEDED' || entry.resourceId === undefined) {
+        continue;
+      }
+      denialCount.set(entry.resourceId, (denialCount.get(entry.resourceId) ?? 0) + 1);
+    }
+    const rows: ResourceDemandRow[] = [];
+    for (const resource of resources) {
+      const mine = overlapping.filter((session) => session.resourceId === resource.id);
+      const intervals = mine.flatMap((session) => {
+        const clipped = clipToWindow(
+          session.startedAt,
+          session.endedAt ?? now,
+          query.from,
+          query.to,
+        );
+        return clipped === null ? [] : [clipped];
+      });
+      const peak = peakConcurrency(intervals);
+      const active = (await this.sessions.search({ resourceId: resource.id, status: 'active' }))
+        .length;
+      const capacityDenials = denialCount.get(resource.id) ?? 0;
+      const peakUtilisation = peak / resource.capacity;
+      const row: ResourceDemandRow = {
+        resourceId: resource.id,
+        name: resource.name,
+        status: resource.status,
+        sessions: mine.length,
+        totalDurationMs: intervals.reduce(
+          (sum, interval) => sum + (interval.end.getTime() - interval.start.getTime()),
+          0,
+        ),
+        currentUtilisation: active / resource.capacity,
+        peakUtilisation,
+        capacityDenials,
+        demandLevel: classifyDemand({ peakUtilisation, capacityDenials }, this.thresholds),
+      };
+      rows.push(row);
+    }
+    return rows.sort(compareDemand);
+  }
+
   private async assemble(passengerId: string, query: HistoryQuery): Promise<UsageHistory> {
     const sessions = await this.sessions.search({
       passengerId,
@@ -186,6 +270,22 @@ export class ReportingService {
       daily: [...days.values()].sort((left, right) => left.date.localeCompare(right.date)),
     };
   }
+}
+
+function clipToWindow(
+  start: Date,
+  end: Date,
+  from: Date | undefined,
+  to: Date | undefined,
+): { start: Date; end: Date } | null {
+  const windowStart = from?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const windowEnd = to?.getTime() ?? Number.POSITIVE_INFINITY;
+  const clippedStart = Math.max(start.getTime(), windowStart);
+  const clippedEnd = Math.min(end.getTime(), windowEnd);
+  if (clippedEnd <= clippedStart) {
+    return null;
+  }
+  return { start: new Date(clippedStart), end: new Date(clippedEnd) };
 }
 
 function byDemand(left: TopResource, right: TopResource): number {

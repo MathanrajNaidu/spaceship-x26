@@ -14,6 +14,7 @@ import { PassengerNotFoundError } from '../../src/domain/errors/NotFoundError.js
 import { InvalidTimeRangeError } from '../../src/domain/errors/ValidationError.js';
 import { RESOURCE_TYPES } from '../../src/domain/resource/ResourceType.js';
 import { InProcessEventBus } from '../../src/infrastructure/events/InProcessEventBus.js';
+import { InMemoryAuditLogRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryAuditLogRepository.js';
 import { InMemoryPassengerRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryPassengerRepository.js';
 import { InMemoryResourceRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryResourceRepository.js';
 import { InMemoryUsageSessionRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryUsageSessionRepository.js';
@@ -62,7 +63,19 @@ function harness() {
     mutex,
     events,
   );
-  const reporting = new ReportingService(authorizer, passengers, resources, sessions, clock);
+  const reporting = new ReportingService(
+    authorizer,
+    passengers,
+    resources,
+    sessions,
+    clock,
+    new InMemoryAuditLogRepository(),
+    {
+      highUtilisation: 0.8,
+      highDenials: 3,
+      lowUtilisation: 0.2,
+    },
+  );
   return { clock, passengers, passengerService, resourceService, usageService, reporting };
 }
 

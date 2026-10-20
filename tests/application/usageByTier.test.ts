@@ -12,6 +12,7 @@ import { AuthorizationError } from '../../src/domain/errors/AuthorizationError.j
 import { InvalidTimeRangeError } from '../../src/domain/errors/ValidationError.js';
 import { TIERS } from '../../src/domain/tier/MembershipTier.js';
 import { InProcessEventBus } from '../../src/infrastructure/events/InProcessEventBus.js';
+import { InMemoryAuditLogRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryAuditLogRepository.js';
 import { InMemoryPassengerRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryPassengerRepository.js';
 import { InMemoryResourceRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryResourceRepository.js';
 import { InMemoryUsageSessionRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryUsageSessionRepository.js';
@@ -62,7 +63,15 @@ function harness() {
       mutex,
       events,
     ),
-    reporting: new ReportingService(authorizer, passengers, resources, sessions, clock),
+    reporting: new ReportingService(
+      authorizer,
+      passengers,
+      resources,
+      sessions,
+      clock,
+      new InMemoryAuditLogRepository(),
+      { highUtilisation: 0.8, highDenials: 3, lowUtilisation: 0.2 },
+    ),
   };
 }
 
