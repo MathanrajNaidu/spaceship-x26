@@ -14,10 +14,10 @@ import {
   ResourceDecommissionedError,
   SessionAlreadyActiveError,
 } from '../../domain/errors/ConflictError.js';
-import { ResourceNotFoundError } from '../../domain/errors/NotFoundError.js';
+import { ResourceNotFoundError, SessionNotFoundError } from '../../domain/errors/NotFoundError.js';
 import type { Passenger } from '../../domain/passenger/Passenger.js';
 import type { Resource } from '../../domain/resource/Resource.js';
-import { UsageSession } from '../../domain/usage/UsageSession.js';
+import { UsageSession, type EndReason } from '../../domain/usage/UsageSession.js';
 
 export class UsageService {
   constructor(
@@ -66,6 +66,44 @@ export class UsageService {
     });
     await this.sessions.save(session);
     return session;
+  }
+
+  async listOwn(actor: Actor, status?: 'active' | 'ended'): Promise<UsageSession[]> {
+    this.authorizer.requirePassenger(actor);
+    return this.sessions.search({
+      passengerId: actor.id,
+      ...(status === undefined ? {} : { status }),
+    });
+  }
+
+  async endOwn(actor: Actor, sessionId: string): Promise<UsageSession> {
+    const passenger = this.authorizer.requirePassenger(actor);
+    return this.endSession(sessionId, 'PASSENGER_ENDED', passenger.id);
+  }
+
+  async endByCrew(actor: Actor, sessionId: string): Promise<UsageSession> {
+    this.authorizer.requireCrewLead(actor);
+    return this.endSession(sessionId, 'CREW_ENDED');
+  }
+
+  private async endSession(
+    sessionId: string,
+    reason: EndReason,
+    ownerId?: string,
+  ): Promise<UsageSession> {
+    const located = await this.sessions.findById(sessionId);
+    if (!located || (ownerId !== undefined && located.passengerId !== ownerId)) {
+      throw new SessionNotFoundError(sessionId);
+    }
+    return this.mutex.runExclusive(located.resourceId, async () => {
+      const session = await this.sessions.findById(sessionId);
+      if (!session || (ownerId !== undefined && session.passengerId !== ownerId)) {
+        throw new SessionNotFoundError(sessionId);
+      }
+      session.end(this.clock.now(), reason);
+      await this.sessions.save(session);
+      return session;
+    });
   }
 
   private async requireResource(id: string): Promise<Resource> {

@@ -14,8 +14,12 @@ import {
   CapacityExceededError,
   ResourceDecommissionedError,
   SessionAlreadyActiveError,
+  SessionAlreadyEndedError,
 } from '../../src/domain/errors/ConflictError.js';
-import { ResourceNotFoundError } from '../../src/domain/errors/NotFoundError.js';
+import {
+  ResourceNotFoundError,
+  SessionNotFoundError,
+} from '../../src/domain/errors/NotFoundError.js';
 import { InMemoryPassengerRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryPassengerRepository.js';
 import { InMemoryResourceRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryResourceRepository.js';
 import { InMemoryUsageSessionRepository } from '../../src/infrastructure/persistence/in-memory/InMemoryUsageSessionRepository.js';
@@ -181,5 +185,85 @@ describe('UsageService.startUsage', () => {
     );
     expect(successes).toHaveLength(1);
     expect(denials).toHaveLength(4);
+  });
+});
+
+describe('UsageService.endUsage', () => {
+  it('lets a passenger end their own session and lists it as ended', async () => {
+    const { usageService, passengerService, resourceService, clock, sessions } = harness();
+    const food = await resourceService.provision(crew, {
+      name: 'Food Station Alpha',
+      type: 'FOOD_STATION',
+      capacity: 2,
+    });
+    const jonah = await passengerService.create(crew, { name: 'Jonah Hale', tier: 'SILVER' });
+    const actor = passengerActor(jonah.id, jonah.name);
+    const started = await usageService.startUsage(actor, food.id);
+    clock.advance(90_000);
+    const ended = await usageService.endOwn(actor, started.id);
+    expect(ended.endReason).toBe('PASSENGER_ENDED');
+    expect(ended.durationMs(clock.now())).toBe(90_000);
+    const stored = await sessions.findById(started.id);
+    expect(stored?.isActive).toBe(false);
+    await expect(usageService.listOwn(actor, 'ended')).resolves.toHaveLength(1);
+    await expect(usageService.listOwn(actor, 'active')).resolves.toHaveLength(0);
+    await expect(usageService.endOwn(actor, started.id)).rejects.toBeInstanceOf(
+      SessionAlreadyEndedError,
+    );
+  });
+
+  it('hides another passenger session as not found and lets crew end any session', async () => {
+    const { usageService, passengerService, resourceService } = harness();
+    const food = await resourceService.provision(crew, {
+      name: 'Food Station Alpha',
+      type: 'FOOD_STATION',
+      capacity: 2,
+    });
+    const jonah = await passengerService.create(crew, { name: 'Jonah Hale', tier: 'SILVER' });
+    const priya = await passengerService.create(crew, { name: 'Priya Nair', tier: 'GOLD' });
+    const started = await usageService.startUsage(passengerActor(jonah.id, jonah.name), food.id);
+    await expect(
+      usageService.endOwn(passengerActor(priya.id, priya.name), started.id),
+    ).rejects.toBeInstanceOf(SessionNotFoundError);
+    await expect(
+      usageService.endOwn(passengerActor(jonah.id, jonah.name), 'ses-missing'),
+    ).rejects.toBeInstanceOf(SessionNotFoundError);
+    await expect(usageService.endByCrew(crew, 'ses-missing')).rejects.toBeInstanceOf(
+      SessionNotFoundError,
+    );
+    const ended = await usageService.endByCrew(crew, started.id);
+    expect(ended.endReason).toBe('CREW_ENDED');
+    await expect(usageService.endByCrew(crew, started.id)).rejects.toBeInstanceOf(
+      SessionAlreadyEndedError,
+    );
+    await expect(usageService.endOwn(crew, started.id)).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(
+      usageService.endByCrew(passengerActor(jonah.id, jonah.name), started.id),
+    ).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(usageService.listOwn(crew)).rejects.toBeInstanceOf(AuthorizationError);
+  });
+
+  it('treats a session that disappears while waiting for the resource lock as not found', async () => {
+    const { usageService, passengerService, resourceService, sessions } = harness();
+    const food = await resourceService.provision(crew, {
+      name: 'Food Station Alpha',
+      type: 'FOOD_STATION',
+      capacity: 1,
+    });
+    const jonah = await passengerService.create(crew, { name: 'Jonah Hale', tier: 'SILVER' });
+    const actor = passengerActor(jonah.id, jonah.name);
+    const started = await usageService.startUsage(actor, food.id);
+    const original = sessions.findById.bind(sessions);
+    let reads = 0;
+    sessions.findById = (id: string) => {
+      reads += 1;
+      if (reads > 1) {
+        return Promise.resolve(null);
+      }
+      return original(id);
+    };
+    await expect(usageService.endOwn(actor, started.id)).rejects.toBeInstanceOf(
+      SessionNotFoundError,
+    );
   });
 });
