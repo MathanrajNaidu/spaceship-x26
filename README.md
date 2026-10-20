@@ -220,7 +220,6 @@ Notable cases: five parallel starts on a capacity-1 resource yield one success a
 - Atomic crew-lead replacement that keeps the roster at exactly three.
 - A maximum session duration per resource type, and a queue for HIGH-demand resources.
 - An outbox so the audit entry and the state change commit together.
-- An OpenAPI document generated from the zod schemas.
 - Capacity changes on a live resource, rejected when the new capacity is below occupancy, and a maintenance state.
 - Metrics.
 
