@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 
 import type { ResourceService } from '../../application/services/ResourceService.js';
-import type { Resource } from '../../domain/resource/Resource.js';
+import { toResourceDto } from '../presenters/resourcePresenter.js';
 import { idParamsSchema } from '../schemas/common.js';
 import {
   discoverySchema,
@@ -56,18 +56,5 @@ export function resourceController(service: ResourceService) {
         page: { limit: page.limit, offset: page.offset, total: page.total },
       });
     },
-  };
-}
-
-function toResourceDto(resource: Resource) {
-  return {
-    id: resource.id,
-    name: resource.name,
-    type: resource.type,
-    minimumTier: resource.minimumTier.name,
-    capacity: resource.capacity,
-    status: resource.status,
-    provisionedAt: resource.provisionedAt.toISOString(),
-    decommissionedAt: resource.decommissionedAt?.toISOString() ?? null,
   };
 }

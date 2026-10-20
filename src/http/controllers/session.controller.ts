@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 
 import type { UsageService } from '../../application/services/UsageService.js';
-import type { UsageSession } from '../../domain/usage/UsageSession.js';
+import { toSessionDto } from '../presenters/sessionPresenter.js';
 import { requireActor } from '../requireActor.js';
 import { idParamsSchema } from '../schemas/common.js';
 import { sessionListSchema, startSessionSchema } from '../schemas/session.schema.js';
@@ -34,17 +34,5 @@ export function sessionController(service: UsageService) {
       const session = await service.endByCrew(requireActor(req), id);
       res.json({ session: toSessionDto(session) });
     },
-  };
-}
-
-function toSessionDto(session: UsageSession) {
-  return {
-    id: session.id,
-    passengerId: session.passengerId,
-    resourceId: session.resourceId,
-    tierAtStart: session.tierAtStart.name,
-    startedAt: session.startedAt.toISOString(),
-    endedAt: session.endedAt?.toISOString() ?? null,
-    endReason: session.endReason ?? null,
   };
 }

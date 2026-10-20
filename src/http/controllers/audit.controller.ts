@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 
 import type { AuditService } from '../../application/services/AuditService.js';
-import type { AuditEntry } from '../../domain/audit/AuditEntry.js';
+import { toAuditDto } from '../presenters/auditPresenter.js';
 import { requireActor } from '../requireActor.js';
 import { auditQuerySchema } from '../schemas/audit.schema.js';
 
@@ -24,20 +24,5 @@ export function auditController(service: AuditService) {
         page: { limit: page.limit, offset: page.offset, total: page.total },
       });
     },
-  };
-}
-
-function toAuditDto(entry: AuditEntry) {
-  return {
-    id: entry.id,
-    occurredAt: entry.occurredAt.toISOString(),
-    actor: { id: entry.actorId, role: entry.actorRole },
-    action: entry.action,
-    outcome: entry.outcome,
-    passengerId: entry.passengerId ?? null,
-    resourceId: entry.resourceId ?? null,
-    sessionId: entry.sessionId ?? null,
-    reason: entry.reason ?? null,
-    metadata: entry.metadata,
   };
 }

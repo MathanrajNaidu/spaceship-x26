@@ -1,8 +1,8 @@
 import type { Request, Response } from 'express';
 
 import type { PassengerService } from '../../application/services/PassengerService.js';
-import type { Passenger } from '../../domain/passenger/Passenger.js';
-import type { UsageSession } from '../../domain/usage/UsageSession.js';
+import { toPassengerDto } from '../presenters/passengerPresenter.js';
+import { toSessionDto } from '../presenters/sessionPresenter.js';
 import {
   changeTierSchema,
   createPassengerSchema,
@@ -73,28 +73,5 @@ export function passengerController(service: PassengerService) {
         endedSessions: result.endedSessions.map(toSessionDto),
       });
     },
-  };
-}
-
-function toPassengerDto(passenger: Passenger) {
-  return {
-    id: passenger.id,
-    name: passenger.name,
-    tier: passenger.tier.name,
-    status: passenger.status,
-    createdAt: passenger.createdAt.toISOString(),
-    updatedAt: passenger.updatedAt.toISOString(),
-  };
-}
-
-function toSessionDto(session: UsageSession) {
-  return {
-    id: session.id,
-    passengerId: session.passengerId,
-    resourceId: session.resourceId,
-    tierAtStart: session.tierAtStart.name,
-    startedAt: session.startedAt.toISOString(),
-    endedAt: session.endedAt?.toISOString() ?? null,
-    endReason: session.endReason ?? null,
   };
 }
