@@ -14,16 +14,22 @@ const envSchema = z.object({
     .optional()
     .transform((value) => value !== 'false'),
   CREW_LEADS: z.string().optional(),
+  STORAGE: z.enum(['memory', 'sqlite']).default('memory'),
+  SQLITE_PATH: z.string().min(1).default('./data/spaceship-x26.sqlite'),
   DEMAND_HIGH_UTILISATION: z.coerce.number().min(0).max(1).default(0.8),
   DEMAND_HIGH_DENIALS: z.coerce.number().int().min(1).default(3),
   DEMAND_LOW_UTILISATION: z.coerce.number().min(0).max(1).default(0.2),
 });
+
+export type StorageBackend = 'memory' | 'sqlite';
 
 export interface AppConfig {
   port: number;
   host: string;
   logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
   seedDemoPassengers: boolean;
+  storage: StorageBackend;
+  sqlitePath: string;
   crewLeads: readonly { id: string; name: string }[];
   demand: {
     highUtilisation: number;
@@ -52,6 +58,8 @@ export function loadConfig(
     host: parsed.data.HOST,
     logLevel: parsed.data.LOG_LEVEL,
     seedDemoPassengers: parsed.data.SEED_DEMO_PASSENGERS,
+    storage: parsed.data.STORAGE,
+    sqlitePath: parsed.data.SQLITE_PATH,
     crewLeads: resolveCrewLeads(parsed.data.CREW_LEADS, defaultCrewLeads),
     demand: {
       highUtilisation: parsed.data.DEMAND_HIGH_UTILISATION,

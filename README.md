@@ -44,7 +44,7 @@ Demo passengers (set `SEED_DEMO_PASSENGERS=false` to skip them):
 | `pas-priya` | Priya Nair | GOLD     |
 | `pas-elena` | Elena Voss | PLATINUM |
 
-The base inventory is seeded as well (`res-food-1`, `res-sleep-1`, `res-cabin-1`, `res-lux-o2-1`, `res-vip-1`, and the rest of the type list). Data is in memory and is gone after a restart.
+The base inventory is seeded as well (`res-food-1`, `res-sleep-1`, `res-cabin-1`, `res-lux-o2-1`, `res-vip-1`, and the rest of the type list). With the default in-memory store, data is gone after a restart. Set `STORAGE=sqlite` to persist to a file; an existing non-empty database is not re-seeded.
 
 ### Docker
 
@@ -53,20 +53,32 @@ docker build -t spaceship-x26-prms .
 docker run --rm -p 4317:4317 spaceship-x26-prms
 ```
 
+Persist with SQLite:
+
+```bash
+docker run --rm -p 4317:4317 \
+  -e STORAGE=sqlite \
+  -e SQLITE_PATH=/data/spaceship-x26.sqlite \
+  -v spaceship-x26-data:/data \
+  spaceship-x26-prms
+```
+
 The image binds `0.0.0.0:4317`. Locally the process binds `127.0.0.1`.
 
 ### Configuration
 
-| Variable                  | Default               | Notes                                                                                          |
-| ------------------------- | --------------------- | ---------------------------------------------------------------------------------------------- |
-| `PORT`                    | `4317`                |                                                                                                |
-| `HOST`                    | `127.0.0.1`           | Set to `0.0.0.0` in the container                                                              |
-| `LOG_LEVEL`               | `info`                | `silent` turns logging off                                                                     |
-| `SEED_DEMO_PASSENGERS`    | on                    | Only the string `false` disables demo passengers                                               |
-| `CREW_LEADS`              | the three leads above | JSON array of `{ "id", "name" }`. Any count other than 3, or a duplicate id, stops the process |
-| `DEMAND_HIGH_UTILISATION` | `0.8`                 | Peak utilisation at or above this is HIGH                                                      |
-| `DEMAND_HIGH_DENIALS`     | `3`                   | Capacity denials at or above this are HIGH                                                     |
-| `DEMAND_LOW_UTILISATION`  | `0.2`                 | Peak utilisation below this is LOW, unless denials already made it HIGH                        |
+| Variable                  | Default                       | Notes                                                                                          |
+| ------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------- |
+| `PORT`                    | `4317`                        |                                                                                                |
+| `HOST`                    | `127.0.0.1`                   | Set to `0.0.0.0` in the container                                                              |
+| `LOG_LEVEL`               | `info`                        | `silent` turns logging off                                                                     |
+| `STORAGE`                 | `memory`                      | `memory` or `sqlite`. Invalid values stop the process                                          |
+| `SQLITE_PATH`             | `./data/spaceship-x26.sqlite` | Used when `STORAGE=sqlite`. Parent directories are created if needed                           |
+| `SEED_DEMO_PASSENGERS`    | on                            | Only the string `false` disables demo passengers                                               |
+| `CREW_LEADS`              | the three leads above         | JSON array of `{ "id", "name" }`. Any count other than 3, or a duplicate id, stops the process |
+| `DEMAND_HIGH_UTILISATION` | `0.8`                         | Peak utilisation at or above this is HIGH                                                      |
+| `DEMAND_HIGH_DENIALS`     | `3`                           | Capacity denials at or above this are HIGH                                                     |
+| `DEMAND_LOW_UTILISATION`  | `0.2`                         | Peak utilisation below this is LOW, unless denials already made it HIGH                        |
 
 ## API
 
@@ -142,7 +154,7 @@ Dependencies point inward: `http` → `application` → `domain`. `infrastructur
 src/
   domain/          tiers, roster, passenger, resource, session, audit entry, access policy, events, errors
   application/     ports, authorizer, services, reporting, subscribers, keyed mutex
-  infrastructure/  in-memory repositories, event bus, clock, ids, config, seed, logger
+  infrastructure/  in-memory and sqlite repositories, event bus, clock, ids, config, seed, logger
   http/            Express app, zod schemas, controllers, presenters, error mapping
 ```
 
@@ -152,7 +164,7 @@ A start-usage request runs through request id, actor resolution and zod, then `U
 
 - **Single responsibility.** `Passenger` enforces its own invariants. `TierAccessPolicy` only decides access. `AuditLogSubscriber` only records events. Controllers translate HTTP. Presenters shape JSON.
 - **Open/closed.** A new access rule is another `AccessPolicy` combined in `CompositeAccessPolicy`, without editing `UsageService`. A new side effect is another event subscriber. A new tier is one line in `MembershipTier`.
-- **Liskov.** In-memory repositories and a future database adapter share one contract suite. `FakeClock` and `SystemClock` are interchangeable.
+- **Liskov.** In-memory and SQLite repositories share one contract suite. `FakeClock` and `SystemClock` are interchangeable.
 - **Interface segregation.** `AuditLogRepository` has `append` and `query` only. Reporting depends on `UsageSessionReader`, not the full repository.
 - **Dependency inversion.** Services take ports. `createApp(deps)` takes its collaborators as arguments, which is what makes the HTTP tests possible.
 
@@ -176,12 +188,12 @@ Services are grouped by area (`PassengerService`, `ResourceService`, `UsageServi
 10. Sessions stay open until someone ends them.
 11. Each session stores `tierAtStart`. Later tier changes do not rewrite history.
 12. Ids and time are injected. Production ids are UUIDs. Tests use `pas-1`, `res-1`, `ses-1`.
-13. The base inventory and the demo passengers are seeded at boot.
-14. Restarting the process drops all data.
+13. The base inventory and the demo passengers are seeded at boot when the store is empty (always for memory; only on first open for SQLite).
+14. With `STORAGE=memory`, restarting drops all data. With `STORAGE=sqlite`, data survives in `SQLITE_PATH`.
 
 ## Trade-offs
 
-- In-memory storage keeps the submission self-contained. The repository contracts are the seam a database adapter would have to pass.
+- In-memory storage is the default so the submission stays self-contained. `STORAGE=sqlite` flips the composition root to `node:sqlite` adapters that pass the same repository contracts. The mutex still serialises capacity checks in-process.
 - Header auth is explicit and easy to replace behind `ActorResolver`.
 - The event bus is synchronous and awaited, so the audit row exists before the response. That is reliability over decoupling.
 - The mutex is about twenty lines. A database would use a transaction and a row lock instead.

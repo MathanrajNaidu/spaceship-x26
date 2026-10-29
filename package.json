@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && mkdir -p dist/infrastructure/persistence/sqlite && cp src/infrastructure/persistence/sqlite/schema.sql dist/infrastructure/persistence/sqlite/schema.sql",
     "start": "node dist/server.js",
     "lint": "eslint . && prettier --check .",
     "typecheck": "tsc --noEmit",
