@@ -14,7 +14,7 @@ const envSchema = z.object({
     .optional()
     .transform((value) => value !== 'false'),
   CREW_LEADS: z.string().optional(),
-  STORAGE: z.enum(['memory', 'sqlite']).default('memory'),
+  STORAGE: z.enum(['memory', 'sqlite']).default('sqlite'),
   SQLITE_PATH: z.string().min(1).default('./data/spaceship-x26.sqlite'),
   DEMAND_HIGH_UTILISATION: z.coerce.number().min(0).max(1).default(0.8),
   DEMAND_HIGH_DENIALS: z.coerce.number().int().min(1).default(3),
